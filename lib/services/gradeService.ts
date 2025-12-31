@@ -116,6 +116,8 @@ export interface UpdateCalificacionRequest {
   comentario?: string;
   materiaId?: string;
   periodoId?: string;
+  esExtraescolar?: boolean;
+  nombreMateria?: string;
 }
 
 export interface DeleteCalificacionResponse {
@@ -434,7 +436,9 @@ const gradeService: IGradeService = {
         calificacion: calificacion.calificacion,
         comentario: calificacion.comentario || '',
         tipoCalificacion: calificacion.tipoCalificacion,
-        ...(calificacion.valorConceptual && { valorConceptual: calificacion.valorConceptual })
+        ...(calificacion.valorConceptual && { valorConceptual: calificacion.valorConceptual }),
+        ...(calificacion.esExtraescolar !== undefined && { esExtraescolar: calificacion.esExtraescolar }),
+        ...(calificacion.nombreMateria && { nombreMateria: calificacion.nombreMateria })
       };
 
       console.log('Enviando petición PUT a:', `/calificaciones/${id}`);
@@ -542,19 +546,31 @@ const gradeService: IGradeService = {
   // Crear calificación extracurricular
   async createExtracurricularGrade(data: CreateExtracurricularRequest): Promise<CalificacionResponse> {
     try {
+      console.log('Creando calificación extracurricular con datos:', data);
+      
       const requestData = {
         estudianteId: data.estudianteId,
+        userMateriaId: data.materiaId,
         periodoId: data.periodoId,
         tipoCalificacion: 'CONCEPTUAL' as const,
+        tipoEvaluacion: 'EXTRAESCOLAR',
         valorConceptual: data.valorConceptual,
-        tipoEvaluacion: 'SEGUIMIENTO',
-        comentario: data.comentario,
+        comentario: data.comentario || 'Evaluación de actividad extraescolar',
         esExtraescolar: true,
         nombreMateria: data.nombreMateria,
-        ...(data.materiaId && data.materiaId !== 'nueva' && { materiaId: data.materiaId })
+        // Incluir docenteId si está disponible en el contexto
+        ...(this.docenteId && { docenteId: this.docenteId })
       };
 
+      console.log('Datos de la petición para calificación extracurricular:', JSON.stringify(requestData, null, 2));
+      
       const response = await api.post<CalificacionResponse>('/calificaciones', requestData);
+      
+      if (!response.data) {
+        throw new Error('No se recibieron datos de la respuesta');
+      }
+
+      console.log('Calificación extracurricular creada exitosamente:', response.data);
       return response.data;
     } catch (error) {
       console.error('Error al crear calificación extracurricular:', error);
@@ -576,40 +592,30 @@ const gradeService: IGradeService = {
   // Obtener calificaciones por materia, grado y período
   async getByMateriaGradoPeriodo(
     materiaId: string,
-    grado: string,  // Número del grado (ej: "1", "2", etc.)
+    grado: string,  // Grado completo (ej: "1° Básico")
     periodoId: string,
-    nivel: string = 'Básico',
-    seccion: string = 'A'  // Sección por defecto
+    nivel?: string,
+    seccion?: string
   ): Promise<CalificacionPorGradoResponse[]> {
     try {
-      // Formatear el grado para que coincida con el formato del backend
-      // Ej: convierte "2" en "2° Básico"
-      const formattedGrado = `${grado}° ${nivel}`;
-      
-      const params = {
+      // Preparar los parámetros de la consulta
+      const params: Record<string, string> = {
         materiaId,
-        grado: formattedGrado,  // Usamos el grado formateado
-        periodoId,
-        nivel
+        grado,
+        periodoId
       };
       
-      console.log('🔍 [gradeService] Buscando calificaciones con parámetros:', {
-        ...params,
-        // Mostrar el grado sin formatear en los logs para depuración
-        gradoOriginal: grado,
-        gradoFormateado: formattedGrado,
-        seccion
-      });
+      // Agregar parámetros opcionales si están definidos
+      if (nivel) params.nivel = nivel;
+      if (seccion) params.seccion = seccion;
       
-      // Hacer la petición con el grado formateado
+      console.log('🔍 [gradeService] Buscando calificaciones con parámetros:', params);
+      
+      // Hacer la petición
       const response = await api.get<CalificacionPorGradoResponse[]>(
         '/calificaciones/profesor/materia-grado',
         { 
-          params: {
-            ...params,
-            // Incluir la sección en la petición si está disponible
-            ...(seccion && { seccion })
-          },
+          params,
           // Asegurar que los parámetros se envíen correctamente
           paramsSerializer: (params) => {
             const searchParams = new URLSearchParams();
@@ -633,13 +639,7 @@ const gradeService: IGradeService = {
       
       if (response.data && response.data.length === 0) {
         console.warn('⚠️ [gradeService] La API devolvió un array vacío. Verifica los parámetros de búsqueda:', {
-          params: {
-            ...params,
-            // Mostrar el grado sin formatear en los logs para depuración
-            gradoOriginal: grado,
-            gradoFormateado: formattedGrado,
-            seccion
-          },
+          params,
           url: '/calificaciones/profesor/materia-grado'
         });
       }
@@ -675,20 +675,26 @@ const gradeService: IGradeService = {
     }
   ): Promise<CalificacionResponse> {
     try {
-      const response = await api.put<{ data: CalificacionResponse }>(
-        `/calificaciones/${id}/extracurricular`,
-        {
-          valorConceptual: data.valorConceptual,
-          comentario: data.comentario || undefined,
-          ...(data.nombreMateria ? { nombreMateria: data.nombreMateria } : {})
-        }
+      const updateData = {
+        valorConceptual: data.valorConceptual,
+        comentario: data.comentario || undefined,
+        esExtraescolar: true,
+        ...(data.nombreMateria ? { nombreMateria: data.nombreMateria } : {})
+      };
+
+      console.log('Actualizando calificación extracurricular con datos:', updateData);
+      
+      const response = await api.put<CalificacionResponse>(
+        `/calificaciones/${id}`,
+        updateData
       );
 
       if (!response.data) {
         throw new Error('No se recibieron datos de la respuesta');
       }
 
-      return response.data.data;
+      console.log('Calificación extracurricular actualizada exitosamente:', response.data);
+      return response.data;
     } catch (error: any) {
       console.error('Error al actualizar calificación extracurricular:', error);
       

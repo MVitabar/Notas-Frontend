@@ -29,8 +29,27 @@ export interface MateriaResponse {
   materiaId: string;
   seccion: string;
   horario: string;
+  periodo: string;
   estado: string;
-  materia: MateriaBase;
+  periodoAcademicoId: string;
+  createdAt: string;
+  updatedAt: string;
+  materia: {
+    id: string;
+    nombre: string;
+    descripcion: string;
+    codigo: string;
+    creditos: number;
+    activa: boolean;
+    tipoMateriaId: string | null;
+    tipoMateria?: {
+      id: string;
+      nombre: string;
+      descripcion: string;
+    };
+    createdAt: string;
+    updatedAt: string;
+  };
   periodoAcademico?: {
     id: string;
     name: string;
@@ -581,20 +600,12 @@ export const dashboardService = {
     try {
       console.log('🔍 [dashboardService] Obteniendo estudiantes por grado con params:', JSON.stringify(params, null, 2));
 
-      // Asegurarse de que el grado sea un número
-      const queryParams: Record<string, string> = {
-        grado: params.grado.toString()
+      // Formatear el grado según el formato esperado por el backend (ej: "1° Primaria A")
+      const formattedGrado = `${params.grado}° ${params.nivel || ''} ${params.seccion || ''}`.trim();
+      
+      const queryParams = {
+        grado: formattedGrado
       };
-
-      // Agregar nivel si está presente
-      if (params.nivel) {
-        queryParams.nivel = params.nivel;
-      }
-
-      // Agregar sección si está presente
-      if (params.seccion) {
-        queryParams.seccion = params.seccion;
-      }
 
       console.log('📡 [dashboardService] Enviando request a /students/por-grado con queryParams:', queryParams);
       

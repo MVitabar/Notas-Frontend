@@ -131,6 +131,7 @@ interface Grade
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { extracurricularSubjects } from "@/lib/data/academicData";
 import Link from "next/link";
+import DownloadGradeReportButton from "@/components/DownloadGradeReportButton";
 import {
   type GradoConMaterias,
   type Materia as ServiceMateria,
@@ -523,15 +524,15 @@ export function Dashboard() {
 
       console.log('Separando calificaciones regulares y extraescolares...');
       mappedGrades.forEach((g: any) => {
-        const isExtra = g.esExtraescolar || (g.materia?.nombre && extraSubjectsList.includes(g.materia.nombre));
+        const esExtraescolar = g.esExtraescolar || (g.materia?.nombre && extraSubjectsList.includes(g.materia.nombre));
         console.log(`Procesando calificación ID ${g.id} (${g.materia?.nombre}):`, {
           esExtraescolar: g.esExtraescolar,
           nombreMateria: g.materia?.nombre,
           esExtraescolarPorLista: g.materia?.nombre && extraSubjectsList.includes(g.materia.nombre),
-          esExtra: isExtra
+          esExtraescolarFinal: esExtraescolar
         });
 
-        if (isExtra && g.materia?.nombre) {
+        if (esExtraescolar && g.materia?.nombre) {
           console.log(`Marcando como extraescolar: ${g.materia.nombre}`);
           extraGrades[g.materia.nombre] = {
             id: g.id,
@@ -804,13 +805,27 @@ export function Dashboard() {
           if (bimestreObj && currentPeriod?.id) {
             console.log(`📡 Fetching grades for materia: ${materia.id}, grado: ${grado}, nivel: ${nivel}, periodo: ${currentPeriod.id}`);
             
+            // Format the grade parameter as expected by the backend (e.g., "1" for grade, "Primaria" for level)
+            console.log('📊 Fetching grades with:', {
+              materiaId: materia.id,
+              grado: grado,
+              nivel: nivel,
+              seccion: seccion,
+              periodoId: currentPeriod.id
+            });
+            
+            // Format the grade parameter to include both grade and level
+            const gradoCompleto = `${grado}° ${nivel}${seccion ? ` ${seccion}` : ''}`;
+            
             // Use the new endpoint to get grades by materia, grade, and period
             const response = await gradeService.getByMateriaGradoPeriodo(
-              materia.id,    // materiaId
-              grado,         // grado (e.g., "1", "2")
+              materia.id,     // materiaId
+              gradoCompleto,  // grado (e.g., "1° Primaria A")
               currentPeriod.id, // periodoId
-              nivel          // nivel (e.g., "Básico")
+              nivel          // nivel (e.g., "Primaria")
             );
+            
+            console.log('📊 Grades API Response:', response);
 
             console.log('📊 Grades received from API:', response);
             
@@ -1008,6 +1023,18 @@ export function Dashboard() {
 
           try {
             console.log('Llamando a gradeService.update...');
+            // Determinar si es una materia extracurricular
+            const currentGrade = selectedStudent?.grados?.[0];
+            const extraSubjectsList = currentGrade ? 
+              (extracurricularSubjects as Record<string, string[]>)[currentGrade] || [] : [];
+            
+            const esExtraescolar = extraSubjectsList.some((subject: string) => 
+              subject === newGrade.nombreMateria || 
+              (newGrade.nombreMateria && newGrade.nombreMateria.includes(subject))
+            );
+
+            console.log('Actualizando calificación con esExtraescolar:', esExtraescolar, 'para materia:', newGrade.nombreMateria);
+            
             const updateData: UpdateCalificacionRequest = {
               tipoCalificacion: newGrade.tipoCalificacion,
               tipoEvaluacion: newGrade.tipoEvaluacion,
@@ -1015,7 +1042,8 @@ export function Dashboard() {
               valorConceptual: newGrade.valorConceptual as ValorConceptual,
               comentario: newGrade.comentario,
               materiaId: newGrade.materiaId,
-              periodoId: currentPeriod.id
+              periodoId: currentPeriod.id,
+              esExtraescolar: esExtraescolar // Usar el campo esExtraescolar
             };
             console.log('Datos para actualizar:', updateData);
             updatedGrade = await gradeService.update(gradeToUpdate.id, updateData);
@@ -1058,6 +1086,24 @@ export function Dashboard() {
           throw new Error('No se pudo determinar el ID del estudiante');
         }
         
+        // Obtener la lista de materias extracurriculares del grado actual del estudiante
+        const currentGrade = selectedStudent?.grados?.[0];
+        const extraSubjectsList = currentGrade ? 
+          (extracurricularSubjects as Record<string, string[]>)[currentGrade] || [] : [];
+        
+        // Determinar si es una materia extracurricular
+        const esExtraescolar = extraSubjectsList.some((subject: string) => 
+          subject === newGrade.nombreMateria || 
+          (newGrade.nombreMateria && newGrade.nombreMateria.includes(subject))
+        );
+        
+        console.log('Creando nueva calificación:', {
+          materia: newGrade.nombreMateria,
+          esExtraescolar,
+          extraSubjectsList,
+          currentGrade
+        });
+
         const gradeData: CreateCalificacionRequest = {
           userMateriaId: newGrade.materiaId,
           estudianteId: selectedStudent.id,
@@ -1067,7 +1113,8 @@ export function Dashboard() {
           calificacion: newGrade.calificacion,
           valorConceptual: newGrade.valorConceptual as ValorConceptual,
           comentario: newGrade.comentario,
-          esExtraescolar: false,
+          esExtraescolar: esExtraescolar,
+          nombreMateria: newGrade.nombreMateria
         };
 
         const newGradeResponse = await gradeService.create(gradeData);
@@ -1577,7 +1624,7 @@ export function Dashboard() {
                                     </Badge>
                                     <div className="flex gap-2">
                                       <Link
-                                        href={`/grades/${materia.id}?bimester=${selectedBimester}&grado=${grado.grado}`}
+                                        href={`/classes/${materia.id}?bimester=${selectedBimester}&grado=${grado.grado}`}
                                       >
                                         <Button
                                           size="sm"
@@ -1794,22 +1841,78 @@ export function Dashboard() {
                                           </Button>
                                         </div>
                                       ) : (
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => {
-                                            // Find the current grade to get the materiaId
-                                            const currentGrade = classGrades.find(g => g.estudianteId === estudiante.id);
-                                            handleEditGrade(
-                                              estudiante.id, 
-                                              typeof grade === 'number' ? grade : null,
-                                              currentGrade?.materiaId || ''
-                                            );
-                                          }}
-                                          title="Editar calificación"
-                                        >
-                                          <Pencil className="h-4 w-4" />
-                                        </Button>
+                                        <div className="flex gap-2">
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => {
+                                              // Find the current grade to get the materiaId
+                                              const currentGrade = classGrades.find(g => g.estudianteId === estudiante.id);
+                                              handleEditGrade(
+                                                estudiante.id, 
+                                                typeof grade === 'number' ? grade : null,
+                                                currentGrade?.materiaId || ''
+                                              );
+                                            }}
+                                            title="Editar calificación"
+                                            className="h-8 w-8 p-0"
+                                          >
+                                            <Pencil className="h-4 w-4" />
+                                          </Button>
+                                          
+                                          <DownloadGradeReportButton 
+                                            estudiante={{
+                                              id: estudiante.id,
+                                              nombre: estudiante.nombre || '',
+                                              apellido: estudiante.apellido || '',
+                                              dni: estudiante.dni || '',
+                                              grado: estudiante.grados?.[0] || '',
+                                              seccion: estudiante.secciones?.[0] || '',
+                                              anio: new Date().getFullYear().toString(),
+                                            }}
+                                            materias={[]}
+                                            extracurriculares_valorativas={[]}
+                                            responsabilidad_aprendizaje={[]}
+                                            responsabilidad_comportamiento={[]}
+                                            habitos_casa={[]}
+                                            promedios={{
+                                              u1: 0,
+                                              u2: 0,
+                                              u3: 0,
+                                              u4: 0
+                                            }}
+                                            periodo={{
+                                              id: currentPeriod?.id || '',
+                                              nombre: currentPeriod?.name || 'Período actual',
+                                              fechaInicio: currentPeriod?.startDate || new Date().toISOString(),
+                                              fechaFin: currentPeriod?.endDate || new Date().toISOString()
+                                            }}
+                                            calificaciones={[]} // Se llenará con los datos reales
+                                            resumen={{
+                                              totalMaterias: 0,
+                                              aprobadas: 0,
+                                              reprobadas: 0,
+                                              promedioGeneral: 0,
+                                              asistencias: {
+                                                total: 0,
+                                                presentes: 0,
+                                                ausentes: 0,
+                                                porcentajeAsistencia: 0
+                                              }
+                                            }}
+                                            conducta={{
+                                              valores: [],
+                                              observacionesGenerales: ""
+                                            }}
+                                            firmaDocente={{
+                                              nombre: teacherProfile?.nombre || teacherProfile?.apellido 
+                                                ? `${teacherProfile.nombre} ${teacherProfile.apellido}`.trim() 
+                                                : "Docente",
+                                              cargo: "Docente",
+                                              fecha: new Date().toISOString()
+                                            }}
+                                          />
+                                        </div>
                                       )}
                                     </TableCell>
                                   </TableRow>
@@ -2156,12 +2259,6 @@ export function Dashboard() {
                                   Materia
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  Evaluación
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  Tipo
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                   Valor
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -2176,31 +2273,6 @@ export function Dashboard() {
                                     <div className="text-sm font-medium text-gray-900">
                                       {grade.materia?.nombre || "N/A"}
                                     </div>
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="text-sm text-gray-900">
-                                      {grade.tipoEvaluacion === "PARCIAL_1"
-                                        ? "Parcial 1"
-                                        : grade.tipoEvaluacion === "PARCIAL_2"
-                                          ? "Parcial 2"
-                                          : grade.tipoEvaluacion ===
-                                            "RECUPERATORIO"
-                                            ? "Recuperatorio"
-                                            : grade.tipoEvaluacion === "FINAL"
-                                              ? "Examen Final"
-                                              : grade.tipoEvaluacion}
-                                    </div>
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap">
-                                    <span
-                                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${grade.tipoCalificacion === "NUMERICA"
-                                        ? "bg-green-100 text-green-800"
-                                        : "bg-blue-100 text-blue-800"}`}
-                                    >
-                                      {grade.tipoCalificacion === "NUMERICA"
-                                        ? "Numérica"
-                                        : "Conceptual"}
-                                    </span>
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap">
                                     {grade.tipoCalificacion === "NUMERICA" ? (
