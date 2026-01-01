@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, Search, Plus, Edit, Trash2, Eye, Mail, Phone, UserCheck, UserX, Loader2 } from "lucide-react"
+import { availableGrades } from "@/lib/data/academicData";
 import Link from "next/link"
 import { toast } from "sonner"
 import { api } from "@/lib/api"
@@ -18,7 +19,7 @@ interface Student {
   id: string;
   firstName: string;
   lastName: string;
-  dateOfBirth: string;
+  dateOfBirth?: string;
   studentCode?: string;
   grade: string;
   parentName: string;
@@ -57,7 +58,9 @@ export default function StudentsManagement() {
           id: apiStudent.id,
           firstName: apiStudent.nombre || '',
           lastName: apiStudent.apellido || '',
-          dateOfBirth: apiStudent.fechaNacimiento || '',
+          dateOfBirth: apiStudent.fechaNacimiento 
+            ? new Date(apiStudent.fechaNacimiento).toISOString().split('T')[0]
+            : '',
           studentCode: apiStudent.dni || '',
           grade: apiStudent.grados?.[0] || 'Sin grado',
           parentName: apiStudent.contactoEmergencia || '',
@@ -144,17 +147,18 @@ export default function StudentsManagement() {
     if (!window.confirm('¿Estás seguro de que deseas eliminar este estudiante?')) return;
     
     try {
-      const response = await api.delete(`/api/students/${id}`);
+      const response = await api.delete(`/students/${id}`);
       
-      if (response.error) {
-        throw new Error(response.error);
+      if (response.status >= 200 && response.status < 300) {
+        setStudents(students.filter(student => student.id !== id));
+        toast.success('Estudiante eliminado correctamente');
+      } else {
+        throw new Error('No se pudo eliminar el estudiante');
       }
-      
-      setStudents(students.filter(student => student.id !== id));
-      toast.success('Estudiante eliminado correctamente');
     } catch (error) {
       console.error('Error deleting student:', error);
-      toast.error(error instanceof Error ? error.message : 'Error al eliminar el estudiante');
+      const errorMessage = error instanceof Error ? error.message : 'Error al eliminar el estudiante';
+      toast.error(errorMessage);
     }
   }
 
@@ -163,9 +167,40 @@ export default function StudentsManagement() {
     setIsViewDialogOpen(true)
   }
 
-  const openEditDialog = (student: Student) => {
+  const openEditDialog = (student: any) => {
+    console.log('Opening edit dialog with student:', student);
     setSelectedStudent(student);
-    setEditFormData({ ...student });
+    
+    // Check if we're dealing with API format or already mapped format
+    const isApiFormat = 'nombre' in student;
+    
+    setEditFormData({
+      id: student.id,
+      firstName: isApiFormat ? student.nombre : student.firstName,
+      lastName: isApiFormat ? student.apellido : student.lastName,
+      dateOfBirth: isApiFormat 
+        ? (student.fechaNacimiento 
+            ? new Date(student.fechaNacimiento).toISOString().split('T')[0] 
+            : (student.dateOfBirth || ''))
+        : (student.dateOfBirth || ''),
+      studentCode: isApiFormat ? student.dni : student.studentCode,
+      grade: isApiFormat
+        ? (Array.isArray(student.grados) && student.grados.length > 0 ? student.grados[0] : '')
+        : student.grade,
+      parentName: isApiFormat ? student.contactoEmergencia : student.parentName,
+      parentPhone: isApiFormat ? student.telefono : student.parentPhone,
+      parentEmail: isApiFormat ? student.email : student.parentEmail,
+      emergencyContact: isApiFormat ? student.contactoEmergencia : student.emergencyContact,
+      emergencyPhone: isApiFormat ? student.telefonoEmergencia : student.emergencyPhone,
+      address: isApiFormat ? student.direccion : student.address,
+      medicalInfo: student.medicalInfo || '',
+      status: isApiFormat 
+        ? (student.activo ? 'active' : 'inactive')
+        : (student.status || 'active'),
+      createdAt: student.createdAt,
+      updatedAt: student.updatedAt
+    });
+    
     setIsEditDialogOpen(true);
   }
 
@@ -177,38 +212,53 @@ export default function StudentsManagement() {
     if (!selectedStudent || !editFormData) return;
 
     try {
-      // Map the form data to match the API expected format
       const apiData = {
-        nombre: editFormData.firstName,
-        apellido: editFormData.lastName,
-        dni: editFormData.studentCode,
-        fechaNacimiento: editFormData.dateOfBirth,
-        telefono: editFormData.parentPhone,
-        email: editFormData.parentEmail,
-        direccion: editFormData.address,
+        nombre: editFormData.firstName || '',
+        apellido: editFormData.lastName || '',
+        dni: editFormData.studentCode || '',
+        fechaNacimiento: editFormData.dateOfBirth || '',
+        telefono: editFormData.parentPhone || '',
+        email: editFormData.parentEmail || '',
+        direccion: editFormData.address || '',
         activo: editFormData.status === 'active',
-        contactoEmergencia: editFormData.emergencyContact,
-        telefonoEmergencia: editFormData.emergencyPhone,
-        grados: [editFormData.grade || '']
+        contactoEmergencia: editFormData.emergencyContact || '',
+        telefonoEmergencia: editFormData.emergencyPhone || '',
+        grados: editFormData.grade ? [editFormData.grade] : []
       };
 
       const response = await api.put(`/students/${selectedStudent.id}`, apiData);
       
-      if (response.error) {
-        throw new Error(response.error);
+      if (response.status >= 200 && response.status < 300) {
+        // Create a properly typed updated student
+        const updatedStudent: Student = {
+          id: selectedStudent.id,
+          firstName: apiData.nombre,
+          lastName: apiData.apellido,
+          dateOfBirth: apiData.fechaNacimiento,
+          studentCode: apiData.dni,
+          grade: apiData.grados && apiData.grados.length > 0 ? apiData.grados[0] : '',
+          parentName: apiData.contactoEmergencia,
+          parentPhone: apiData.telefono,
+          parentEmail: apiData.email,
+          emergencyContact: apiData.contactoEmergencia,
+          emergencyPhone: apiData.telefonoEmergencia,
+          address: apiData.direccion,
+          status: apiData.activo ? 'active' : 'inactive',
+          medicalInfo: '', // Not in the API response
+          createdAt: selectedStudent.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        // Update the students list with the properly typed student
+        setStudents(students.map(student => 
+          student.id === selectedStudent.id ? updatedStudent : student
+        ));
+        
+        toast.success('Estudiante actualizado correctamente');
+        setIsEditDialogOpen(false);
+      } else {
+        throw new Error('No se pudo actualizar el estudiante');
       }
-
-      // Update the students list with the updated data
-      setStudents(students.map(student => 
-        student.id === selectedStudent.id ? { 
-          ...student, 
-          ...editFormData,
-          grade: editFormData.grade || student.grade
-        } : student
-      ));
-
-      toast.success('Estudiante actualizado correctamente');
-      setIsEditDialogOpen(false);
     } catch (error) {
       console.error('Error updating student:', error);
       toast.error(error instanceof Error ? error.message : 'Error al actualizar el estudiante');
@@ -584,21 +634,48 @@ export default function StudentsManagement() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="status">Estado</Label>
-                  <Select 
-                    value={editFormData?.status || 'inactive'}
-                    onValueChange={(value) => handleInputChange('status', value as 'active' | 'inactive' | 'suspended')}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Activo</SelectItem>
-                      <SelectItem value="inactive">Inactivo</SelectItem>
-                      <SelectItem value="suspended">Suspendido</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="grade">Grado</Label>
+                    <Select
+                      value={editFormData?.grade || ''}
+                      onValueChange={(value) => handleInputChange('grade', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar grado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(availableGrades).map(([level, grades]) => (
+                          <div key={level} className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">
+                            {level}
+                          </div>
+                        ))}
+                        {Object.entries(availableGrades).flatMap(([level, grades]) =>
+                          grades.map((grade) => (
+                            <SelectItem key={grade} value={grade}>
+                              {grade}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="status">Estado</Label>
+                    <Select 
+                      value={editFormData?.status || 'inactive'}
+                      onValueChange={(value) => handleInputChange('status', value as 'active' | 'inactive' | 'suspended')}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Activo</SelectItem>
+                        <SelectItem value="inactive">Inactivo</SelectItem>
+                        <SelectItem value="suspended">Suspendido</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div className="flex justify-end gap-2">

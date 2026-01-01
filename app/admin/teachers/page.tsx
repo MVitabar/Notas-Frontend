@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -9,10 +10,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Search, Plus, Edit, Trash2, Eye, Mail, Phone, UserCheck, UserX, Calendar, CalendarDays, FileText } from "lucide-react"
+import { ArrowLeft, Search, Plus, Edit, Trash2, Eye, Mail, Phone, UserCheck, UserX, Calendar, CalendarDays, FileText, X } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/components/auth/AuthProvider"
 import { toast } from "sonner"
+import { api } from "@/lib/api"
+import { regularSubjects } from "@/lib/data/academicData"
 
 interface Materia {
   id: string
@@ -40,6 +43,7 @@ interface Teacher {
 }
 
 export default function TeachersManagement() {
+  const router = useRouter()
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null)
@@ -47,46 +51,115 @@ export default function TeachersManagement() {
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [teachers, setTeachers] = useState<Teacher[]>([])
+  const [editFormData, setEditFormData] = useState<Partial<Teacher> & { selectedMaterias: string[] } | null>(null)
+  const [availableMaterias, setAvailableMaterias] = useState<Materia[]>([])
+  const [isMateriasOpen, setIsMateriasOpen] = useState(false)
+  const [materiasSearch, setMateriasSearch] = useState('')
   const { token } = useAuth()
 
-  const fetchTeachers = async () => {
-    setIsLoading(true);
-    try {
-      console.log('Fetching teachers from:', `${process.env.NEXT_PUBLIC_API_URL}/auth/teachers`);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/teachers`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+  useEffect(() => {
+    const fetchMaterias = async () => {
+      try {
+        console.log('🔍 Fetching materias from API...');
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/materias`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          credentials: 'include'
+        });
+
+        console.log('📡 Response status:', response.status);
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('❌ Error response:', {
+            status: response.status,
+            statusText: response.statusText,
+            errorData
+          });
+          throw new Error(`Error al cargar las materias: ${response.statusText}`);
         }
-      });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
-        throw new Error('Error al cargar los docentes: ' + errorText);
+        const data = await response.json();
+        console.log('📦 Raw response data:', data);
+        
+        const materiasData = Array.isArray(data) ? data : (data.data || []);
+        console.log('✅ Total materias recibidas:', materiasData.length);
+        
+        // Filtrar solo materias curriculares (esExtracurricular: false)
+        const materiasCurriculares = materiasData.filter((m: any) => 
+          m.esExtracurricular === false
+        );
+        
+        console.log('📚 Materias curriculares:', materiasCurriculares.length);
+        
+        // Mapear al formato esperado
+        const mappedMaterias = materiasCurriculares.map((materia: any) => ({
+          id: materia.id,
+          nombre: materia.nombre,
+          descripcion: materia.descripcion || '',
+          grado: materia.grado || '',
+          nivel: materia.nivel || '',
+          seccion: materia.seccion || '',
+          docenteId: 0, // Se asignará cuando se asigne a un docente
+          estudiantes: 0
+        }));
+
+        console.log('🔄 Materias mapeadas:', mappedMaterias);
+        setAvailableMaterias(mappedMaterias);
+        
+      } catch (error) {
+        console.error('❌ Error en fetchMaterias:', error);
+        toast.error('Error al cargar las materias. Por favor, intente de nuevo.');
       }
+    };
 
-      const result = await response.json();
-      console.log('API Response:', result);
-      
-      // Extract the data array from the response
-      const teachersData = Array.isArray(result.data) ? result.data : [];
-      console.log('Teachers data:', teachersData);
-      
-      setTeachers(teachersData);
-    } catch (error) {
-      console.error('Error:', error);
-      toast.error('Error al cargar la lista de docentes');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    fetchMaterias();
+  }, []);
 
   useEffect(() => {
+    const fetchTeachers = async () => {
+      setIsLoading(true)
+      try {
+        console.log('Fetching teachers...')
+        const response = await api.get('/auth/teachers')
+        
+        if (response.status >= 200 && response.status < 300) {
+          // Extract the data array from the response
+          const teachersData = Array.isArray(response.data?.data) ? response.data.data : []
+          console.log('Teachers data:', teachersData)
+          
+          setTeachers(teachersData)
+        } else {
+          throw new Error('Error al cargar los docentes')
+        }
+      } catch (error) {
+        console.error('Error:', error)
+        const errorMessage = error instanceof Error ? error.message : 'Error al cargar la lista de docentes'
+        toast.error(errorMessage)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
     if (token) {
-      fetchTeachers();
+      fetchTeachers()
     }
   }, [token])
+
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (isMateriasOpen) {
+        setIsMateriasOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isMateriasOpen])
 
   const filteredTeachers = (Array.isArray(teachers) ? teachers : []).filter((teacher) => {
     const matchesSearch =
@@ -106,27 +179,22 @@ export default function TeachersManagement() {
       const teacher = teachers.find(t => t.id === teacherId)
       if (!teacher) return
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/teachers/${teacherId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ activo: !teacher.activo })
+      const response = await api.patch(`/auth/teachers/${teacherId}/status`, { 
+        status: !teacher.activo 
       })
 
-      if (!response.ok) {
-        throw new Error('Error al actualizar el estado del docente')
+      if (response.status >= 200 && response.status < 300) {
+        setTeachers(teachers.map(t => 
+          t.id === teacherId ? { ...t, activo: !t.activo } : t
+        ))
+        toast.success(`Docente ${!teacher.activo ? 'activado' : 'desactivado'} correctamente`)
+      } else {
+        throw new Error(response.data?.message || 'Error al actualizar el estado del docente')
       }
-
-      setTeachers(teachers.map(t => 
-        t.id === teacherId ? { ...t, activo: !t.activo } : t
-      ))
-
-      toast.success(`Docente ${!teacher.activo ? 'activado' : 'desactivado'} correctamente`)
     } catch (error) {
       console.error('Error updating teacher status:', error)
-      toast.error('Error al actualizar el estado del docente')
+      const errorMessage = error instanceof Error ? error.message : 'Error al actualizar el estado del docente'
+      toast.error(errorMessage)
     }
   }
 
@@ -134,23 +202,133 @@ export default function TeachersManagement() {
     if (!confirm("¿Estás seguro de que deseas eliminar este docente?")) return
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/teachers/${teacherId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      if (!response.ok) {
+      const response = await api.delete(`/teachers/${teacherId}`)
+      
+      if (response.status >= 200 && response.status < 300) {
+        setTeachers(teachers.filter(teacher => teacher.id !== teacherId))
+        toast.success('Docente eliminado correctamente')
+      } else {
         throw new Error('Error al eliminar el docente')
       }
-
-      setTeachers(teachers.filter(teacher => teacher.id !== teacherId))
-      toast.success('Docente eliminado correctamente')
     } catch (error) {
       console.error('Error deleting teacher:', error)
-      toast.error('Error al eliminar el docente')
+      const errorMessage = error instanceof Error ? error.message : 'Error al eliminar el docente';
+      toast.error(errorMessage);
     }
+  }
+
+  const handleInputChange = (field: keyof Teacher, value: string | string[] | boolean) => {
+    setEditFormData(prev => prev ? { ...prev, [field]: value } : null)
+  }
+
+  const handleSaveChanges = async () => {
+    console.log('Saving changes...');
+    if (!selectedTeacher || !editFormData) {
+      console.error('No selected teacher or form data');
+      return;
+    }
+
+    try {
+      const currentSelectedMaterias = [...(editFormData.selectedMaterias || [])];
+      console.log('Current selected materias:', currentSelectedMaterias);
+      
+      // Create an array of Materia objects from the selected IDs
+      const materiasToSend = currentSelectedMaterias.map(id => {
+        const materia = availableMaterias.find(m => m.id === id);
+        return materia ? { id: materia.id, nombre: materia.nombre } : { id, nombre: '' };
+      });
+
+      console.log('Sending materias:', materiasToSend);
+
+      const requestData = {
+        nombre: editFormData.nombre,
+        apellido: editFormData.apellido,
+        email: editFormData.email,
+        telefono: editFormData.telefono,
+        direccion: editFormData.direccion,
+        dni: editFormData.dni,
+        fechaNacimiento: editFormData.fechaNacimiento,
+        contactoEmergencia: editFormData.contactoEmergencia,
+        telefonoEmergencia: editFormData.telefonoEmergencia,
+        grados: editFormData.grados || [],
+        materias: materiasToSend, // Send full materia objects with id and nombre
+        activo: editFormData.activo,
+      };
+
+      console.log('Request payload:', requestData);
+
+      const response = await api.put(`/auth/teachers/${selectedTeacher.id}`, requestData);
+
+      if (response.status >= 200 && response.status < 300) {
+        // Update the local state with the new data
+        const updatedTeacher: Teacher = {
+          ...selectedTeacher,
+          ...editFormData,
+          materias: materiasToSend
+        };
+        
+        setTeachers(teachers.map(teacher => 
+          teacher.id === selectedTeacher.id ? updatedTeacher : teacher
+        ));
+        toast.success('Docente actualizado correctamente');
+        setIsEditDialogOpen(false);
+      } else {
+        throw new Error('Error al actualizar el docente');
+      }
+    } catch (error) {
+      console.error('Error updating teacher:', error);
+      toast.error('Error al actualizar el docente');
+    }
+  }
+
+  const toggleMateria = (materiaId: string) => {
+    console.log('Toggling materia:', materiaId);
+    if (!editFormData) {
+      console.error('No editFormData available');
+      return;
+    }
+    
+    setEditFormData(prev => {
+      if (!prev) return null;
+      
+      const currentMaterias = [...(prev.selectedMaterias || [])];
+      const materiaIndex = currentMaterias.indexOf(materiaId);
+      
+      if (materiaIndex === -1) {
+        currentMaterias.push(materiaId);
+      } else {
+        currentMaterias.splice(materiaIndex, 1);
+      }
+      
+      console.log('Updated selected materias:', currentMaterias);
+      
+      const updated = {
+        ...prev,
+        selectedMaterias: [...currentMaterias],
+        materias: availableMaterias
+          .filter(m => currentMaterias.includes(m.id))
+          .map(m => ({ id: m.id, nombre: m.nombre }))
+      };
+      
+      console.log('Updated form data:', updated);
+      return updated;
+    });
+  }
+
+  const removeMateria = (materiaId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!editFormData) return
+    
+    const currentMaterias = [...(editFormData.selectedMaterias || [])]
+    const updatedMaterias = currentMaterias.filter(id => id !== materiaId)
+    
+    setEditFormData({
+      ...editFormData,
+      selectedMaterias: updatedMaterias,
+      materias: availableMaterias
+        .filter(m => updatedMaterias.includes(m.id))
+        .map(m => ({ id: m.id, nombre: m.nombre }))
+    })
   }
 
   const openViewDialog = (teacher: Teacher) => {
@@ -159,8 +337,43 @@ export default function TeachersManagement() {
   }
 
   const openEditDialog = (teacher: Teacher) => {
-    setSelectedTeacher(teacher)
-    setIsEditDialogOpen(true)
+    console.log('Opening edit dialog for teacher:', teacher);
+    setSelectedTeacher(teacher);
+    
+    // Handle both string and Materia object formats for materias
+    const materiasIds = Array.isArray(teacher.materias) 
+      ? teacher.materias.map(m => {
+          if (typeof m === 'string') {
+            return m; // If it's already an ID (string)
+          } else if (m && typeof m === 'object' && m.id) {
+            return m.id; // If it's a Materia object
+          }
+          return ''; // Fallback for invalid data
+        }).filter(Boolean) // Remove any empty strings
+      : [];
+
+    console.log('Mapped materias IDs:', materiasIds);
+    
+    const formData = {
+      id: teacher.id,
+      nombre: teacher.nombre || '',
+      apellido: teacher.apellido || '',
+      email: teacher.email || '',
+      telefono: teacher.telefono || '',
+      direccion: teacher.direccion || '',
+      dni: teacher.dni || '',
+      fechaNacimiento: teacher.fechaNacimiento ? new Date(teacher.fechaNacimiento).toISOString().split('T')[0] : '',
+      contactoEmergencia: teacher.contactoEmergencia || '',
+      telefonoEmergencia: teacher.telefonoEmergencia || '',
+      grados: [...(teacher.grados || [])],
+      materias: teacher.materias || [],
+      selectedMaterias: materiasIds,
+      activo: teacher.activo,
+    };
+    
+    console.log('Setting form data:', formData);
+    setEditFormData(formData);
+    setIsEditDialogOpen(true);
   }
 
   if (isLoading) {
@@ -172,7 +385,7 @@ export default function TeachersManagement() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50" onClick={() => isMateriasOpen && setIsMateriasOpen(false)}>
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="container mx-auto px-4 py-4">
@@ -388,7 +601,7 @@ export default function TeachersManagement() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => openEditDialog(teacher)}
+                              onClick={() => router.push(`/admin/teachers/new?edit=${teacher.id}`)}
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
@@ -416,6 +629,185 @@ export default function TeachersManagement() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Edit Teacher Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Editar Docente</DialogTitle>
+            </DialogHeader>
+            {editFormData && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="nombre">Nombre</Label>
+                    <Input
+                      id="nombre"
+                      value={editFormData.nombre || ''}
+                      onChange={(e) => handleInputChange('nombre', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="apellido">Apellido</Label>
+                    <Input
+                      id="apellido"
+                      value={editFormData.apellido || ''}
+                      onChange={(e) => handleInputChange('apellido', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={editFormData.email || ''}
+                      onChange={(e) => handleInputChange('email', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="telefono">Teléfono</Label>
+                    <Input
+                      id="telefono"
+                      value={editFormData.telefono || ''}
+                      onChange={(e) => handleInputChange('telefono', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="dni">DNI</Label>
+                    <Input
+                      id="dni"
+                      value={editFormData.dni || ''}
+                      onChange={(e) => handleInputChange('dni', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="fechaNacimiento">Fecha de Nacimiento</Label>
+                    <Input
+                      id="fechaNacimiento"
+                      type="date"
+                      value={editFormData.fechaNacimiento || ''}
+                      onChange={(e) => handleInputChange('fechaNacimiento', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="contactoEmergencia">Contacto de Emergencia</Label>
+                    <Input
+                      id="contactoEmergencia"
+                      value={editFormData.contactoEmergencia || ''}
+                      onChange={(e) => handleInputChange('contactoEmergencia', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="telefonoEmergencia">Teléfono de Emergencia</Label>
+                    <Input
+                      id="telefonoEmergencia"
+                      value={editFormData.telefonoEmergencia || ''}
+                      onChange={(e) => handleInputChange('telefonoEmergencia', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="direccion">Dirección</Label>
+                    <Input
+                      id="direccion"
+                      value={editFormData.direccion || ''}
+                      onChange={(e) => handleInputChange('direccion', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="activo">Estado</Label>
+                    <Select
+                      value={editFormData.activo ? 'active' : 'inactive'}
+                      onValueChange={(value) => handleInputChange('activo', value === 'active')}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar estado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Activo</SelectItem>
+                        <SelectItem value="inactive">Inactivo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Materias Asignadas</Label>
+                    <div className="relative">
+                      <div 
+                        className="flex flex-wrap gap-2 p-2 border rounded-md min-h-10 cursor-pointer"
+                        onClick={() => setIsMateriasOpen(!isMateriasOpen)}
+                      >
+                        {editFormData.selectedMaterias && editFormData.selectedMaterias.length > 0 ? (
+                          editFormData.selectedMaterias.map(materiaId => {
+                            const materia = availableMaterias.find(m => m.id === materiaId)
+                            return materia ? (
+                              <div key={materiaId} className="flex items-center bg-gray-100 px-2 py-1 rounded-md text-sm">
+                                {materia.nombre}
+                                <X 
+                                  className="h-3 w-3 ml-1 text-gray-500 hover:text-red-500"
+                                  onClick={(e) => removeMateria(materiaId, e)}
+                                />
+                              </div>
+                            ) : null
+                          })
+                        ) : (
+                          <span className="text-sm text-gray-400">Seleccionar materias...</span>
+                        )}
+                      </div>
+                      
+                      {isMateriasOpen && (
+                        <div className="absolute z-10 mt-1 w-full bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                          <div className="p-2 border-b">
+                            <Input
+                              placeholder="Buscar materias..."
+                              value={materiasSearch}
+                              onChange={(e) => setMateriasSearch(e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-full"
+                            />
+                          </div>
+                          <div className="py-1">
+                            {availableMaterias
+                              .filter(materia => 
+                                materia.nombre.toLowerCase().includes(materiasSearch.toLowerCase())
+                              )
+                              .map((materia) => (
+                                <div
+                                  key={materia.id}
+                                  className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-100 ${
+                                    editFormData.selectedMaterias?.includes(materia.id) ? 'bg-blue-50' : ''
+                                  }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    toggleMateria(materia.id)
+                                  }}
+                                >
+                                  {materia.nombre}
+                                </div>
+                              ))}
+                            {availableMaterias.filter(materia => 
+                              materia.nombre.toLowerCase().includes(materiasSearch.toLowerCase())
+                            ).length === 0 && (
+                              <div className="px-4 py-2 text-sm text-gray-500">
+                                No se encontraron materias
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={handleSaveChanges}>
+                    Guardar Cambios
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* View Teacher Dialog */}
         <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>

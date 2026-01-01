@@ -169,6 +169,14 @@ export const regularSubjects = {
     "Tecnologías del Aprendizaje y la Comunicación", "Educación Física", 
     "Contabilidad"
   ],
+  '3° Básico C': [
+    "Matemáticas", "Cultura e Idioma Maya", "Comunicación y Lenguaje / Idioma Español", 
+    "Comunicación y Lenguaje / Idioma Extranjero", "Ciencias Naturales", 
+    "Ciencias Sociales", "Educación Musical", "Artes Visuales", "Teatro", 
+    "Danza", "Emprendimiento para la Productividad", 
+    "Tecnologías del Aprendizaje y la Comunicación", "Educación Física", 
+    "Contabilidad"
+  ],
   
   // Diversificado (4°-6°)
   '4° Bachillerato en Ciencias y Letras': [
@@ -371,6 +379,13 @@ export const extracurricularSubjects = {
     "Completa trabajos a tiempo", "Participa en actividades", "Llega a tiempo", 
     "Atiende juntas de padres", "Practica diariamente lo estudiado"
   ],
+  '3° Básico C': [
+    "Programa de Lectura", "Moral Cristiana", "Respeta autoridad", 
+    "Interactúa bien con sus compañeros", "Acepta responsabilidad", 
+    "Practica valores morales", "Responsable en clases", 
+    "Completa trabajos a tiempo", "Participa en actividades", "Llega a tiempo", 
+    "Atiende juntas de padres", "Practica diariamente lo estudiado"
+  ],
   
   // Bachillerato en Ciencias y Letras
   '4° Bachillerato en Ciencias y Letras': [
@@ -434,7 +449,7 @@ export const availableGrades = {
   'Básicos': [
     "1° Básico A", "1° Básico B", "1° Básico C",
     "2° Básico A", "2° Básico B", "2° Básico C",
-    "3° Básico A", "3° Básico B"
+    "3° Básico A", "3° Básico B", "3° Básico C"
   ],
   'Diversificado': [
     "4° Bachillerato en Ciencias y Letras",

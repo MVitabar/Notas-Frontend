@@ -2,8 +2,8 @@
 
 import type React from "react"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { 
   Loader2, 
   UserPlus, 
@@ -39,7 +39,10 @@ import { extracurricularSubjects, availableGrades } from "@/lib/data/academicDat
 
 export default function NewTeacherPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { token, user } = useAuth()
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [teacherId, setTeacherId] = useState<string | null>(null)
   
   interface FormData {
     firstName: string;
@@ -72,6 +75,97 @@ export default function NewTeacherPage() {
     grades: [],
     status: "active",
   })
+
+  // Fetch teacher data when in edit mode
+  useEffect(() => {
+    const editId = searchParams.get('edit')
+    if (editId) {
+      setIsEditMode(true)
+      setTeacherId(editId)
+      fetchTeacherData(editId)
+    }
+  }, [searchParams])
+
+  const fetchTeacherData = async (id: string) => {
+    try {
+      console.log('Fetching teacher data for ID:', id);
+      console.log('API URL:', `${process.env.NEXT_PUBLIC_API_URL}/auth/teachers/${id}`);
+      
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/teachers/${id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        credentials: 'include'
+      });
+      
+      console.log('Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Error response:', errorData);
+        throw new Error(`Error al cargar los datos del docente: ${response.status} ${response.statusText}`);
+      }
+      
+      const responseData = await response.json();
+      console.log('Received teacher data:', responseData);
+      
+      // Extraer los datos del docente de la respuesta
+      const teacher = responseData.data || {};
+      const profile = teacher.perfilDocente || {};
+      
+      // Mapeo de campos con valores por defecto seguros
+      const formDataUpdate: FormData = {
+        firstName: teacher.nombre || '',
+        lastName: teacher.apellido || '',
+        email: teacher.email || '',
+        phone: teacher.telefono || '',
+        address: profile.direccion || '',
+        dateOfBirth: profile.fechaNacimiento ? 
+          (typeof profile.fechaNacimiento === 'string' ? profile.fechaNacimiento.split('T')[0] : '') : '',
+        nationalId: profile.dni || '',
+        emergencyContact: profile.contactoEmergencia || profile.contactoEmergencia || '',
+        emergencyPhone: profile.telefonoEmergencia || profile.telefonoEmergencia || '',
+        temporaryPassword: '',
+        subjects: [],
+        grades: [],
+        status: teacher.activo === true || teacher.activo === 'true' ? 'active' : 'inactive',
+      };
+
+      // Manejo de materias
+      if (Array.isArray(teacher.materias)) {
+        formDataUpdate.subjects = teacher.materias.map((m: any) => {
+          if (typeof m === 'object' && m !== null) {
+            return m.id || '';
+          }
+          return String(m || '');
+        }).filter((id: string) => id !== '');
+      }
+
+      // Manejo de grados - los grados están en perfilDocente.grados
+      if (Array.isArray(profile.grados)) {
+        formDataUpdate.grades = profile.grados.map((g: any) => {
+          if (typeof g === 'object' && g !== null) {
+            return g.id || g.nombre || g;
+          }
+          return String(g || '');
+        }).filter((g: string) => g !== '');
+      }
+      
+      console.log('Mapped form data:', formDataUpdate);
+      
+      // Actualizar el estado del formulario
+      setFormData(formDataUpdate);
+      
+      // Actualizar los grados seleccionados para el filtrado de materias
+      setSelectedGrades(formDataUpdate.grades);
+      
+    } catch (error) {
+      console.error('Error fetching teacher data:', error);
+      toast.error(error instanceof Error ? error.message : 'Error al cargar los datos del docente');
+    }
+  };
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitStatus, setSubmitStatus] = useState<"idle" | "success" | "error">("idle")
@@ -350,23 +444,28 @@ export default function NewTeacherPage() {
         setTemporaryPassword(passwordToUse)
       }
 
-      // Preparar los datos para enviar al backend
-      const requestData = {
+          // Prepare data for the request
+      // Prepare the request data
+      const requestData: any = {
         nombre: formData.firstName.trim(),
         apellido: formData.lastName.trim(),
         email: formData.email.trim(),
-        password: passwordToUse, // Usar el valor real de la contraseña
-        rol: 'DOCENTE',
-        telefono: formData.phone?.trim() || null,
-        direccion: formData.address?.trim() || null,
+        telefono: formData.phone?.trim() || '',
+        direccion: formData.address?.trim() || '',
         fechaNacimiento: formData.dateOfBirth || null,
-        dni: formData.nationalId?.trim() || null,
-        contactoEmergencia: formData.emergencyContact?.trim() || null,
-        telefonoEmergencia: formData.emergencyPhone?.trim() || null,
-        requiresPasswordChange: true,
+        dni: formData.nationalId?.trim() || '',
+        contactoEmergencia: formData.emergencyContact?.trim() || '',
+        telefonoEmergencia: formData.emergencyPhone?.trim() || '',
         activo: formData.status === 'active',
         materias: Array.isArray(formData.subjects) ? formData.subjects : [],
         grados: Array.isArray(formData.grades) ? formData.grades : []
+      }
+      
+      // Only include password for new teachers
+      if (!isEditMode) {
+        requestData.password = passwordToUse
+        requestData.rol = 'DOCENTE'
+        requestData.requiresPasswordChange = true
       }
 
       // Log para depuración (sin contraseña)
@@ -381,41 +480,68 @@ export default function NewTeacherPage() {
         password: passwordToUse
       }, null, 2));
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/register/teacher`, {
-        method: 'POST',
+      const url = isEditMode && teacherId 
+        ? `${process.env.NEXT_PUBLIC_API_URL}/auth/teachers/${teacherId}`
+        : `${process.env.NEXT_PUBLIC_API_URL}/auth/register/teacher`
+        
+      const method = isEditMode ? 'PUT' : 'POST'
+      
+      const fetchOptions: RequestInit = {
+        method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          ...requestData,
-          password: passwordToUse // Asegurar que la contraseña se envíe correctamente
-        })
-      })
+        body: JSON.stringify(requestData)
+      };
+      
+      // Include credentials for API routes
+      if (url.startsWith('/api/')) {
+        fetchOptions.credentials = 'include';
+      }
+      
+      const response = await fetch(url, fetchOptions)
 
       const responseData = await response.json()
 
       if (!response.ok) {
         console.error('Error en la respuesta del servidor:', responseData)
-        throw new Error(responseData.message || 'Error al registrar el docente')
+        throw new Error(responseData.message || `Error al ${isEditMode ? 'actualizar' : 'registrar'} el docente`)
       }
 
-      setSubmitStatus("success")
-      setTemporaryPassword(passwordToUse)
+      // Show success message and handle redirection
+      toast.success(`Docente ${isEditMode ? 'actualizado' : 'registrado'} exitosamente`)
       
-      // Mostrar mensaje de éxito
-      toast.success("Docente registrado exitosamente")
-      
-      // Desplazarse al mensaje de éxito
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-
-      // Opcional: Limpiar el formulario después de un registro exitoso
-      // setFormData({
-      //   firstName: "",
-      //   lastName: "",
-      //   email: "",
-      //   // ...resto de campos
-      // })
+      if (isEditMode) {
+        // Redirect back to teachers list after a short delay
+        setTimeout(() => {
+          router.push('/admin/teachers')
+        }, 1500)
+      } else {
+        // Show temporary password for new teachers
+        setSubmitStatus("success")
+        setTemporaryPassword(passwordToUse)
+        
+        // Reset form for next entry (except password)
+        if (!formData.temporaryPassword) {
+          setFormData(prev => ({
+            ...prev,
+            firstName: "",
+            lastName: "",
+            email: "",
+            phone: "",
+            address: "",
+            dateOfBirth: "",
+            nationalId: "",
+            emergencyContact: "",
+            emergencyPhone: "",
+            subjects: [],
+            grades: [],
+            status: "active"
+          }))
+          setSelectedGrades([])
+        }
+      }
 
     } catch (err) {
       console.error("Error en el registro:", err)
@@ -431,24 +557,24 @@ export default function NewTeacherPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            <Link href="/admin/teachers">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Volver
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">Nuevo Docente</h1>
-              <p className="text-sm text-gray-600">Registrar un nuevo profesor en el sistema</p>
-            </div>
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex items-center mb-6">
+            <Button variant="ghost" size="icon" onClick={() => router.back()} className="mr-2">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h1 className="text-2xl font-bold">{isEditMode ? 'Editar Docente' : 'Nuevo Docente'}</h1>
           </div>
         </div>
       </div>
 
       <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {isEditMode && (
+            <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-md">
+              <p>Estás editando el perfil de {formData.firstName} {formData.lastName}.</p>
+              <p className="text-sm text-blue-600 mt-1">Los cambios se guardarán al hacer clic en "Guardar Cambios".</p>
+            </div>
+          )}
           {/* Información Personal */}
           <Card>
             <CardHeader>
@@ -706,9 +832,9 @@ export default function NewTeacherPage() {
                             <h4 className="text-sm font-medium text-gray-700">{category}</h4>
                             <div className="space-y-1 pl-2">
                               {filteredCategorySubjects.map((subject) => (
-                                <div key={subject} className="flex items-center space-x-2">
+                                <div key={`${category}-${subject}`} className="flex items-center space-x-2">
                                   <Checkbox
-                                    id={`subject-${subject}`}
+                                    id={`subject-${category}-${subject}`.replace(/\s+/g, '-').toLowerCase()}
                                     checked={formData.subjects.includes(subject)}
                                     onCheckedChange={(checked) =>
                                       handleSubjectChange(subject, checked as boolean)
@@ -716,7 +842,7 @@ export default function NewTeacherPage() {
                                     disabled={Object.values(extracurricularSubjects).flat().includes(subject)}
                                   />
                                   <Label 
-                                    htmlFor={`subject-${subject}`} 
+                                    htmlFor={`subject-${category}-${subject}`.replace(/\s+/g, '-').toLowerCase()} 
                                     className={`text-sm font-normal ${
                                       Object.values(extracurricularSubjects).flat().includes(subject) ? 'text-muted-foreground' : ''
                                     }`}
@@ -770,27 +896,29 @@ export default function NewTeacherPage() {
           </Card>
 
           {/* Submit Button */}
-          <div className="flex justify-end gap-4">
-            <Link href="/admin/teachers">
-              <Button type="button" variant="outline">
-                Cancelar
-              </Button>
-            </Link>
-            <Button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700"
+          <div className="flex gap-3">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => router.push('/admin/teachers')}
+              disabled={isSubmitting}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              type="submit" 
+              className="w-full sm:w-auto" 
               disabled={isSubmitting}
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Registrando...
+                  {isEditMode ? 'Actualizando...' : 'Registrando...'}
                 </>
+              ) : isEditMode ? (
+                'Guardar Cambios'
               ) : (
-                <>
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Registrar Docente
-                </>
+                'Registrar Docente'
               )}
             </Button>
           </div>
