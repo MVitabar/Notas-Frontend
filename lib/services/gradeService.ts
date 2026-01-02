@@ -164,8 +164,7 @@ interface CreateExtracurricularRequest {
   nombreMateria: string;
 }
 
-interface IGradeService {
-  [x: string]: any;
+export interface IGradeService {
   getByStudent(estudianteId: string, periodoId?: string): Promise<CalificacionPorEstudiante[]>;
   create(data: CreateCalificacionRequest): Promise<CalificacionResponse>;
   update(id: string, data: UpdateCalificacionRequest): Promise<CalificacionResponse>;
@@ -183,6 +182,22 @@ interface IGradeService {
   createExtraescolar(data: CreateCalificacionRequest): Promise<CalificacionResponse>;
   createExtracurricularGrade(data: CreateExtracurricularRequest): Promise<CalificacionResponse>;
   updateExtracurricularGrade(id: string, data: { valorConceptual: ValorConceptual; comentario?: string; nombreMateria?: string }): Promise<CalificacionResponse>;
+  saveHabitGrades(estudianteId: string, data: SaveHabitGradesRequest): Promise<void>;
+  getHabitGrades(estudianteId: string, periodoId: string): Promise<any[]>;
+}
+
+export interface HabitGradeRequest {
+  evaluacionHabitoId: string;
+  u1?: string | null;
+  u2?: string | null;
+  u3?: string | null;
+  u4?: string | null;
+  comentario?: string | null;
+}
+
+export interface SaveHabitGradesRequest {
+  periodoId: string;
+  calificaciones: HabitGradeRequest[];
 }
 
 const gradeService: IGradeService = {
@@ -557,9 +572,7 @@ const gradeService: IGradeService = {
         valorConceptual: data.valorConceptual,
         comentario: data.comentario || 'Evaluación de actividad extraescolar',
         esExtraescolar: true,
-        nombreMateria: data.nombreMateria,
-        // Incluir docenteId si está disponible en el contexto
-        ...(this.docenteId && { docenteId: this.docenteId })
+        nombreMateria: data.nombreMateria
       };
 
       console.log('Datos de la petición para calificación extracurricular:', JSON.stringify(requestData, null, 2));
@@ -713,7 +726,242 @@ const gradeService: IGradeService = {
       
       throw error;
     }
-  }
+  },
+  
+  // Guardar evaluaciones de hábitos
+  async saveHabitGrades(estudianteId: string, data: SaveHabitGradesRequest): Promise<void> {
+    try {
+      console.log('Guardando evaluaciones de hábitos para estudiante:', estudianteId, data);
+      
+      const response = await api.put(
+        `/calificaciones-habitos/estudiante/${estudianteId}`,
+        {
+          periodoId: data.periodoId,
+          calificaciones: data.calificaciones.map(habito => ({
+            evaluacionHabitoId: habito.evaluacionHabitoId,
+            u1: habito.u1 || null,
+            u2: habito.u2 || null,
+            u3: habito.u3 || null,
+            u4: habito.u4 || null,
+            comentario: habito.comentario || ''
+          }))
+        }
+      );
+      
+      console.log('=== RESPUESTA DEL BACKEND ===');
+      console.log('Status:', response.status);
+      console.log('Status Text:', response.statusText);
+      console.log('Response Data:', response.data);
+      console.log('=== FIN RESPUESTA DEL BACKEND ===');
+      
+      console.log('Evaluaciones de hábitos guardadas exitosamente');
+      return response.data;
+    } catch (error) {
+      console.error('Error al guardar evaluaciones de hábitos:', error);
+      throw error;
+    }
+  },
+
+  // Obtener evaluaciones de hábitos de un estudiante
+  async getHabitGrades(estudianteId: string, periodoId: string): Promise<any[]> {
+    try {
+      console.log(`=== INICIO getHabitGrades ===`);
+      console.log(`Obteniendo evaluaciones de hábitos para estudiante: ${estudianteId}, período: ${periodoId}`);
+      
+      const response = await api.get(`/calificaciones-habitos/estudiante/${estudianteId}?periodoId=${periodoId}`);
+      
+      console.log('=== RESPUESTA DEL ENDPOINT DE HÁBITOS ===');
+      console.log('Status:', response.status);
+      console.log('Datos recibidos:', JSON.stringify(response.data, null, 2));
+      
+      if (!response.data) {
+        console.log('No se recibieron datos de evaluaciones de hábitos');
+        return [];
+      }
+
+      // Si los datos vienen en un objeto con propiedad 'calificaciones'
+      let habitData = Array.isArray(response.data) ? response.data : response.data.calificaciones || [];
+      
+      console.log('=== ESTRUCTURA DE DATOS DE HÁBITOS (ANTES DE ENRIQUECER) ===');
+      console.log('Tipo de dato:', typeof response.data);
+      console.log('Es array:', Array.isArray(response.data));
+      console.log('Cantidad de evaluaciones de hábitos:', habitData.length);
+      
+      // Obtener las tablas necesarias para enriquecer los datos
+      console.log('=== OBTENIENDO LISTAS COMPLETAS ===');
+      
+      // Obtener lista completa de materias
+      const materiasResponse = await api.get('/materias');
+      const todasLasMaterias = materiasResponse.data || [];
+      console.log('Total de materias obtenidas:', todasLasMaterias.length);
+      
+      // Obtener tabla de tipos de materia
+      const tiposMateriaResponse = await api.get('/materias/tipos');
+      const tiposMateria = tiposMateriaResponse.data || [];
+      console.log('Total de tipos de materia obtenidos:', tiposMateria.length);
+      
+      // Crear mapas para acceso rápido
+      const materiasMap = new Map();
+      const tiposMateriaMap = new Map();
+      
+      todasLasMaterias.forEach((materia: any) => {
+        materiasMap.set(materia.id, materia);
+      });
+      
+      tiposMateria.forEach((tipo: any) => {
+        tiposMateriaMap.set(tipo.id, tipo);
+      });
+      
+      // Enriquecer los datos de hábitos con información completa
+      habitData = habitData.map((habito: any) => {
+        const materiaInfo = habito.evaluacionHabitoId ? materiasMap.get(habito.evaluacionHabitoId) : null;
+        const tipoMateriaId = materiaInfo?.tipoMateriaId || habito.tipoMateriaId || null;
+        const tipoMateriaInfo = tipoMateriaId ? tiposMateriaMap.get(tipoMateriaId) : null;
+        
+        // Debug information
+        console.log(`Buscando materia con ID: ${habito.evaluacionHabitoId}`);
+        console.log(`Total de materias disponibles: ${materiasMap.size}`);
+        console.log(`IDs de materias disponibles:`, Array.from(materiasMap.keys()).slice(0, 10));
+        
+        if (!materiaInfo) {
+          console.warn(`No se encontró información para la materia con ID: ${habito.evaluacionHabitoId || 'no proporcionado'}`);
+          console.warn(`IDs disponibles:`, Array.from(materiasMap.keys()));
+        } else {
+          console.log(`Materia encontrada:`, {
+            id: materiaInfo.id,
+            nombre: materiaInfo.nombre,
+            tipoMateriaId: materiaInfo.tipoMateriaId,
+            esExtracurricular: materiaInfo.esExtracurricular
+          });
+        }
+        
+        // Determinar si es extracurricular basado en múltiples fuentes
+        const esExtracurricular = tipoMateriaInfo?.nombre === 'EXTRACURRICULAR' || 
+                                     materiaInfo?.esExtracurricular === true || 
+                                     habito.esExtracurricular === true;
+        
+        // Determinar si es HOGAR basado en múltiples fuentes
+        const esHogar = tipoMateriaInfo?.nombre === 'HOGAR' || 
+                        habito.tipoMateriaNombre === 'HOGAR' ||
+                        habito.tipo === 'HOGAR' ||
+                        (materiaInfo?.tipoMateriaId && 
+                         tiposMateriaMap.get(materiaInfo.tipoMateriaId)?.nombre === 'HOGAR');
+        
+        // Determinar si es HABITO/COMPORTAMIENTO/APRENDIZAJE/CASA basado en múltiples fuentes
+        const esHabito = (
+          // Check tipoMateriaInfo first
+          tipoMateriaInfo?.nombre === 'HABITO' || 
+          tipoMateriaInfo?.nombre === 'COMPORTAMIENTO' ||
+          tipoMateriaInfo?.nombre === 'APRENDIZAJE' ||
+          tipoMateriaInfo?.nombre === 'CASA' ||
+          // Check habito.tipoMateriaNombre
+          habito.tipoMateriaNombre === 'HABITO' ||
+          habito.tipoMateriaNombre === 'COMPORTAMIENTO' ||
+          habito.tipoMateriaNombre === 'APRENDIZAJE' ||
+          habito.tipoMateriaNombre === 'CASA' ||
+          // Check habito.tipo (direct from backend)
+          habito.tipo === 'HABITO' ||
+          habito.tipo === 'COMPORTAMIENTO' ||
+          habito.tipo === 'APRENDIZAJE' ||
+          habito.tipo === 'CASA' ||
+          // Check materiaInfo and tiposMateriaMap
+          (tipoMateriaId && (
+            tiposMateriaMap.get(tipoMateriaId)?.nombre === 'HABITO' ||
+            tiposMateriaMap.get(tipoMateriaId)?.nombre === 'COMPORTAMIENTO' ||
+            tiposMateriaMap.get(tipoMateriaId)?.nombre === 'APRENDIZAJE' ||
+            tiposMateriaMap.get(tipoMateriaId)?.nombre === 'CASA'
+          ))
+        );
+        
+        console.log(`Evaluación "${habito.nombre}":`, {
+          evaluacionHabitoId: habito.evaluacionHabitoId,
+          materiaInfoEncontrada: !!materiaInfo,
+          tipoMateriaId: materiaInfo?.tipoMateriaId,
+          tipoMateriaNombre: tipoMateriaInfo?.nombre,
+          esExtracurricular,
+          esHogar,
+          esHabito
+        });
+        
+        return {
+          ...habito,
+          // Agregar información completa de la materia
+          materia: materiaInfo || {
+            id: habito.evaluacionHabitoId,
+            nombre: habito.nombre || 'Sin nombre',
+            descripcion: materiaInfo?.descripcion || '',
+            codigo: materiaInfo?.codigo || '',
+            creditos: materiaInfo?.creditos || 0,
+            activa: materiaInfo?.activa !== false,
+            createdAt: materiaInfo?.createdAt || '',
+            updatedAt: materiaInfo?.updatedAt || '',
+            tipoMateriaId: materiaInfo?.tipoMateriaId || null,
+            esExtracurricular: esExtracurricular,
+            orden: materiaInfo?.orden || 0
+          },
+          // Mantener las referencias directas para compatibilidad
+          esExtracurricular: esExtracurricular,
+          tipoMateriaId: materiaInfo?.tipoMateriaId || tipoMateriaInfo?.id || null,
+          tipoMateriaNombre: tipoMateriaInfo?.nombre || materiaInfo?.tipoMateria || 'SIN TIPO',
+          codigo: materiaInfo?.codigo || habito.codigo || '',
+          // Mantener los datos originales del backend como fallback
+          idOriginal: habito.id,
+          codigoOriginal: habito.codigo,
+          esExtracurricularOriginal: habito.esExtracurricular,
+          // Nuevos campos para mejor clasificación
+          esHogar,
+          esHabito
+        };
+      });
+      
+      console.log('=== ESTRUCTURA DE DATOS DE HÁBITOS (DESPUÉS DE ENRIQUECER) ===');
+      console.log('Cantidad de evaluaciones de hábitos enriquecidas:', habitData.length);
+      
+      if (habitData.length > 0) {
+        console.log('Ejemplo de primera evaluación de hábito enriquecida:', JSON.stringify(habitData[0], null, 2));
+        
+        // Mostrar las propiedades de cada evaluación enriquecida
+        habitData.forEach((habito: any, index: number) => {
+          console.log(`Hábito ${index + 1}:`, {
+            id: habito.id,
+            evaluacionHabitoId: habito.evaluacionHabitoId,
+            nombre: habito.nombre || habito.materia?.nombre || 'Sin nombre',
+            u1: habito.u1,
+            u2: habito.u2,
+            u3: habito.u3,
+            u4: habito.u4,
+            comentario: habito.comentario,
+            esExtracurricular: habito.esExtracurricular,
+            tipoMateriaNombre: habito.tipoMateriaNombre,
+            tipoMateriaId: habito.tipoMateriaId,
+            codigo: habito.codigo,
+            materia: {
+              id: habito.materia?.id,
+              nombre: habito.materia?.nombre,
+              esExtracurricular: habito.materia?.esExtracurricular,
+              tipoMateriaId: habito.materia?.tipoMateriaId
+            },
+            tipoMateria: {
+              id: habito.tipoMateria?.id,
+              nombre: habito.tipoMateria?.nombre,
+              descripcion: habito.tipoMateria?.descripcion
+            }
+          });
+        });
+      }
+      
+      console.log('=== FIN getHabitGrades ===');
+      return habitData;
+    } catch (error: any) {
+      console.error('Error al obtener evaluaciones de hábitos:', error);
+      console.error('Error details:', {
+        message: (error as Error).message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      return [];
+    }
+  },
 };
 
 export default gradeService;

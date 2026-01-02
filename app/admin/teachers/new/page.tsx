@@ -180,30 +180,40 @@ export default function NewTeacherPage() {
     'Preescolar': [
       "Destrezas de Aprendizaje",
       "Comunicación y Lenguaje",
-      "Medio Social y Natural",
-      "Expresión Artística",
-      "Educación Física",
-      "Formación Ciudadana",
-      "Tecnología"
+      "Conocimiento de su Mundo",
+      "Estimulación Artística",
+      "Motricidad",
+      "Educación Cristiana",
+      "Idioma Inglés"
     ],
     'Primaria Baja (1°-3°)': [
-      "Comunicación y Lenguaje",
-      "Matemáticas",
-      "Medio Social y Natural",
+      "Idioma Materno",
+      "Tercer Idioma (Inglés)",
+      "Matemática",
+      "Medio Social",
+      "Medio Natural",
       "Expresión Artística",
       "Educación Física",
       "Formación Ciudadana",
-      "Tecnología"
+      "Ortografía",
+      "Artes Plásticas",
+      "Moral Cristiana",
+      "Computación"
     ],
     'Primaria Alta (4°-6°)': [
-      "Comunicación y Lenguaje",
-      "Matemáticas",
-      "Ciencias Naturales",
+      "Idioma Materno",
+      "Tercer Idioma (Inglés)",
+      "Matemática",
       "Ciencias Sociales",
-      "Expresión Artística",
+      "Ciencias Naturales y Tecnología",
+      "Expresión Artística Música",
       "Educación Física",
       "Formación Ciudadana",
-      "Tecnología"
+      "Productividad y Desarrollo",
+      "Ortografía",
+      "Artes Plásticas",
+      "Moral Cristiana",
+      "Computación"
     ],
     'Básicos (1°-2°)': [
       "Comunicación y Lenguaje",
@@ -213,7 +223,7 @@ export default function NewTeacherPage() {
       "Expresión Artística",
       "Educación Física",
       "Formación Ciudadana",
-      "Tecnología",
+      "Tecnología y Computación",
       "Inglés"
     ],
     '3° Básico': [
@@ -227,7 +237,7 @@ export default function NewTeacherPage() {
       "Expresión Artística",
       "Educación Física",
       "Formación Ciudadana",
-      "Tecnología",
+      "Tecnología y Computación",
       "Inglés"
     ],
     'Bachillerato en Ciencias y Letras': [
