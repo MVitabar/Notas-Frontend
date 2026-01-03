@@ -269,9 +269,7 @@ export const dashboardService = {
 
   async getCurrentAcademicPeriod() {
     try {
-      console.log('🔍 [dashboardService] Obteniendo período académico actual...');
       const response = await api.get('/academic-periods/current');
-      console.log('📊 [dashboardService] Respuesta de la API:', response.data);
 
       // El endpoint devuelve el objeto directamente, no está envuelto en { data: ... }
       return response.data || null;
@@ -300,7 +298,6 @@ export const dashboardService = {
   // Obtener los períodos académicos que representan los bimestres
   async getBimestres(periodoId: string): Promise<Bimestre[]> {
     try {
-      console.log(`🔍 [dashboardService] Obteniendo períodos académicos (bimestres) para el año...`);
 
       // Primero, obtener el período padre (año académico)
       const periodoPadre = await api.get(`/academic-periods/${periodoId}`);
@@ -591,32 +588,21 @@ export const dashboardService = {
       return null;
     }
   },
-  // Obtener estudiantes por grado, nivel y sección
-  getEstudiantesPorGrado: async (params: {
+
+  async getEstudiantesPorGrado(params: {
     grado: number;
     nivel?: string;
     seccion?: string;
-  }): Promise<Estudiante[]> => {
+  }): Promise<Estudiante[]> {
     try {
-      console.log('🔍 [dashboardService] Obteniendo estudiantes por grado con params:', JSON.stringify(params, null, 2));
-
       // Formatear el grado según el formato esperado por el backend (ej: "1° Primaria A")
       const formattedGrado = `${params.grado}° ${params.nivel || ''} ${params.seccion || ''}`.trim();
       
       const queryParams = {
-        grado: formattedGrado
+        grado: formattedGrado,
+        nivel: params.nivel,
+        seccion: params.seccion
       };
-
-      console.log('📡 [dashboardService] Enviando request a /students/por-grado con queryParams:', queryParams);
-      
-      // Log the full request configuration
-      const requestConfig = {
-        method: 'get',
-        url: '/students/por-grado',
-        params: queryParams,
-        baseURL: api.defaults.baseURL
-      };
-      console.log('🔧 [dashboardService] Configuración completa de la petición:', JSON.stringify(requestConfig, null, 2));
 
       const response = await api.get('/students/por-grado', {
         params: queryParams,
@@ -631,19 +617,10 @@ export const dashboardService = {
         }
       });
 
-      console.log('📥 [dashboardService] Respuesta de la API:', {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-        data: response.data ? `Array de ${Array.isArray(response.data) ? response.data.length : 'datos no-array'}` : 'Sin datos'
-      });
-
       if (!Array.isArray(response.data)) {
-        console.warn('⚠️ [dashboardService] La respuesta no es un array:', response.data);
         return [];
       }
 
-      console.log(`✅ [dashboardService] Estudiantes obtenidos: ${response.data.length}`);
       return response.data;
     } catch (error) {
       console.error('Error al obtener estudiantes por grado:', error);
@@ -661,5 +638,4 @@ export const dashboardService = {
       throw error;
     }
   },
-  // ... other methods
-}
+};

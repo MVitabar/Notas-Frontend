@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { PDFDownloadLink, PDFViewer } from '@react-pdf/renderer';
 import { Button } from '@/components/ui/button';
 import { Download, Eye } from 'lucide-react';
-import GradeReportPdf from './GradeReportPdf';
+import GradeReportPdfFinal from './GradeReportPdfFinal';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { habitGradeService } from '@/lib/services/habitGradeService';
@@ -13,6 +13,7 @@ import gradeService from '@/lib/services/gradeService';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -98,17 +99,11 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
         setIsLoading(true);
         setError(null);
 
-        console.log('Iniciando carga de datos para el PDF...');
-        console.log('Estudiante ID:', estudiante.id);
-        console.log('Período ID:', periodo.id);
-
         // 1. Obtener calificaciones académicas
-        console.log('Obteniendo calificaciones académicas...');
         const grades = await gradeService.getByStudent(
           estudiante.id,
           periodo.id
         );
-        console.log('Calificaciones recibidas:', grades);
 
         // 2. Inicializar estructura de hábitos con valores por defecto
         let habitData: {
@@ -124,9 +119,7 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
         };
 
         try {
-          console.log('Obteniendo evaluaciones de hábitos del nuevo endpoint...');
           const habitGrades = await gradeService.getHabitGrades(estudiante.id, periodo.id);
-          console.log('Evaluaciones de hábitos recibidas:', habitGrades);
 
           // Los datos ya vienen categorizados por el campo 'tipo' del backend
           // Solo necesitamos pasarlos directamente al PDF
@@ -136,13 +129,6 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
             responsabilidad_comportamiento: habitGrades.filter((h: any) => h.tipo === 'COMPORTAMIENTO'),
             extracurriculares_valorativas: habitGrades.filter((h: any) => h.tipo === 'EXTRACURRICULAR')
           };
-          
-          console.log('Hábitos categorizados:', {
-            casa: habitData.habitos_casa.length,
-            aprendizaje: habitData.responsabilidad_aprendizaje.length,
-            comportamiento: habitData.responsabilidad_comportamiento.length,
-            extracurriculares: habitData.extracurriculares_valorativas.length
-          });
         } catch (habitError) {
           console.warn('No se pudieron cargar las evaluaciones de hábitos, continuando sin ellas:', habitError);
         }
@@ -271,15 +257,11 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
             seccion: estudiante.seccion || 'A'
           },
           materias: materiasRegulares,
-          habitos: habitData, // ← Nuevo: datos crudos del endpoint
+          habitos: habitData, 
           promedios,
           periodo
         };
         
-        console.log('Materias regulares:', materiasRegulares);
-        console.log('Actividades extracurriculares:', extracurriculares);
-
-        console.log('Datos transformados para el PDF:', transformedData);
         setPdfData(transformedData);
       } catch (error) {
         console.error('Error al cargar datos para el PDF:', error);
@@ -328,9 +310,6 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
 
   const fileName = `reporte-${estudiante.nombre}-${estudiante.apellido}-${format(new Date(), 'yyyy-MM-dd')}.pdf`;
 
-  // Debug: Log the data being passed to the PDF
-  console.log('PDF Data:', JSON.stringify(pdfData, null, 2));
-
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -342,16 +321,19 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
       <DialogContent className="max-w-6xl h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Vista Previa del Reporte de Calificaciones</DialogTitle>
+          <DialogDescription>
+            Vista previa del reporte de calificaciones del estudiante con opción de descargar en formato PDF
+          </DialogDescription>
         </DialogHeader>
         <div className="flex-1 overflow-hidden">
           <PDFViewer width="100%" height="100%" className="border rounded-md">
-            <GradeReportPdf data={pdfData} />
+            <GradeReportPdfFinal data={pdfData} />
           </PDFViewer>
         </div>
         <div className="flex justify-end gap-2 pt-4 border-t">
           <Button variant="outline" asChild>
             <PDFDownloadLink
-              document={<GradeReportPdf data={pdfData} />}
+              document={<GradeReportPdfFinal data={pdfData} />}
               fileName={fileName}
               className="flex items-center gap-2"
             >
@@ -367,6 +349,6 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
       </DialogContent>
     </Dialog>
   );
-}
+};
 
 export default DownloadGradeReportButton;

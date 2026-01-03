@@ -13,19 +13,19 @@ const styles = StyleSheet.create({
   },
   headerImage: {
     width: '100%',
-    height: 120, // Adjust based on your header image aspect ratio
+    height: 120,
     marginBottom: 8,
   },
   footerImage: {
     width: '100%',
-    height: 80, // Adjust based on your footer image aspect ratio
+    height: 80,
     position: 'absolute',
     bottom: 0,
     left: 0,
   },
   content: {
     padding: 10,
-    paddingBottom: 85, // Make space for the footer
+    paddingBottom: 85,
   },
   header: {
     flexDirection: 'row',
@@ -145,7 +145,7 @@ interface GradeReportPdfProps {
   data: {
     estudiante: Student;
     materias: Materia[];
-    habitos: any[]; // ← Nuevo: datos del endpoint de hábitos
+    habitos: any[];
     promedios: {
       u1: number;
       u2: number;
@@ -227,93 +227,20 @@ const GradeReportPdf = ({ data }: GradeReportPdfProps) => {
     u4: promedios?.u4 || 0
   };
 
-  const renderStudentInfo = () => (
-    <View style={styles.studentInfo}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
-        <Text style={{ fontSize: 9 }}>
-          <Text style={{ fontWeight: 'bold' }}>Nombre:</Text> {`${estudiante.nombre} ${estudiante.apellido}`}
-        </Text>
-        <Text style={{ fontSize: 9 }}>
-          <Text style={{ fontWeight: 'bold' }}>Grado:</Text> {estudiante.grado}
-        </Text>
-      </View>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <Text style={{ fontSize: 9 }}>
-          <Text style={{ fontWeight: 'bold' }}>DNI:</Text> {estudiante.dni}
-        </Text>
-        <Text style={{ fontSize: 9 }}>
-          <Text style={{ fontWeight: 'bold' }}>Sección:</Text> {estudiante.seccion}
-        </Text>
-      </View>
-    </View>
-  );
-
-  const renderTableHeader = (headers: string[], widths: string[]) => (
-    <View style={[styles.tableRow, styles.tableHeader]}>
-      {headers.map((header, index) => (
-        <Text 
-          key={index} 
-          style={[
-            styles.tableCell, 
-            { 
-              fontWeight: 'bold',
-              width: widths[index] || 'auto',
-              textAlign: index > 0 ? 'center' : 'left'
-            }
-          ]}
-        >
-          {header}
-        </Text>
-      ))}
-    </View>
-  );
-
-  const renderTableRow = (item: any, fields: string[], widths: string[] = [], highlight = false) => {
-    // Skip rendering if item is undefined or null
-    if (!item) return null;
-    
-    return (
-      <View 
-        key={item.id || item.nombre} 
-        style={[
-          styles.tableRow, 
-          highlight ? { backgroundColor: '#f5f5f5' } : {}
-        ]}
-      >
-        {fields.map((field, i) => {
-          const value = item[field];
-          const displayValue = value === null || value === undefined ? '' : value;
-          
-          return (
-            <Text 
-              key={i} 
-              style={[
-                styles.tableCell, 
-                { 
-                  width: widths[i] || 'auto',
-                  textAlign: i > 0 ? 'center' : 'left',
-                  fontSize: field === 'nombre' ? 10 : 11
-                }
-              ]}
-            >
-              {displayValue}
-            </Text>
-          );
-        })}
-      </View>
-    );
-  };
-
   return (
     <Document>
       <Page size={[8.5 * 72, 13 * 72]} style={styles.page}>
-        {/* Header Image - with fallback */}
-        {typeof window !== 'undefined' && (
+        {/* Header con imagen y fallback */}
+        <View style={styles.headerImage}>
           <Image 
             src="/header.png" 
-            style={styles.headerImage} 
+            style={{
+              width: '100%',
+              height: 120,
+              objectFit: 'contain'
+            }}
           />
-        )}
+        </View>
         
         <View style={styles.content}>
           {/* Student Info */}
@@ -337,8 +264,8 @@ const GradeReportPdf = ({ data }: GradeReportPdfProps) => {
               <Text style={[styles.tableCell, {width: '12%', textAlign: 'center', fontWeight: 'bold'}]}>NOTAS FINALES</Text>
             </View>
             
-            {materias.map((materia: Materia) => (
-              <View key={materia.id} style={styles.tableRow}>
+            {materias.map((materia: Materia, index: number) => (
+              <View key={`materia-${index}`} style={styles.tableRow}>
                 <Text style={[styles.tableCell, {width: '40%'}]}>{materia.nombre_materia}</Text>
                 <Text style={[styles.tableCell, {width: '12%', textAlign: 'center'}]}>{materia.u1 || ''}</Text>
                 <Text style={[styles.tableCell, {width: '12%', textAlign: 'center'}]}>{materia.u2 || ''}</Text>
@@ -487,23 +414,20 @@ const GradeReportPdf = ({ data }: GradeReportPdfProps) => {
             )}
           </View>
 
-          <View style={{marginTop: 15, textAlign: 'center'}}>
-            <Text style={{fontSize: 10, marginBottom: 5, fontWeight: 'bold'}}>
-              Resultado: DESTACA, AVANZA, NECESITA MEJORAR, INSATISFACTORIO
-            </Text>
-            <Text style={{fontSize: 10, fontStyle: 'italic'}}>
-              Sistema de Gestión Académica - {new Date().getFullYear()}
-            </Text>
-          </View>
+          
         </View>
         
-        {/* Footer Image - with fallback */}
-        {typeof window !== 'undefined' && (
+        {/* Footer con imagen */}
+        <View style={styles.footerImage}>
           <Image 
             src="/footer.png" 
-            style={styles.footerImage} 
+            style={{
+              width: '100%',
+              height: 80,
+              objectFit: 'contain'
+            }}
           />
-        )}
+        </View>
       </Page>
     </Document>
   );

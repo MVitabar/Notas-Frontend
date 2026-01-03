@@ -204,8 +204,6 @@ const gradeService: IGradeService = {
   // Obtener calificaciones de un estudiante
   async getByStudent(estudianteId: string, periodoId?: string): Promise<CalificacionPorEstudiante[]> {
     try {
-      console.log(`[DEBUG] Obteniendo calificaciones para el estudiante ${estudianteId}${periodoId ? ` para el período ${periodoId}` : ''}`);
-
       const params = new URLSearchParams();
       if (periodoId) params.append('periodoId', periodoId);
 
@@ -622,8 +620,6 @@ const gradeService: IGradeService = {
       if (nivel) params.nivel = nivel;
       if (seccion) params.seccion = seccion;
       
-      console.log('🔍 [gradeService] Buscando calificaciones con parámetros:', params);
-      
       // Hacer la petición
       const response = await api.get<CalificacionPorGradoResponse[]>(
         '/calificaciones/profesor/materia-grado',
@@ -641,21 +637,6 @@ const gradeService: IGradeService = {
           }
         }
       );
-
-      console.log('📡 [gradeService] Respuesta de la API:', {
-        status: response.status,
-        statusText: response.statusText,
-        data: response.data ? `Array de ${response.data.length} elementos` : 'Sin datos',
-        // Mostrar un ejemplo del primer elemento si existe
-        ...(response.data?.[0] && { primerElemento: response.data[0] })
-      });
-      
-      if (response.data && response.data.length === 0) {
-        console.warn('⚠️ [gradeService] La API devolvió un array vacío. Verifica los parámetros de búsqueda:', {
-          params,
-          url: '/calificaciones/profesor/materia-grado'
-        });
-      }
 
       return response.data || [];
     } catch (error: any) {
@@ -695,8 +676,6 @@ const gradeService: IGradeService = {
         ...(data.nombreMateria ? { nombreMateria: data.nombreMateria } : {})
       };
 
-      console.log('Actualizando calificación extracurricular con datos:', updateData);
-      
       const response = await api.put<CalificacionResponse>(
         `/calificaciones/${id}`,
         updateData
@@ -706,7 +685,6 @@ const gradeService: IGradeService = {
         throw new Error('No se recibieron datos de la respuesta');
       }
 
-      console.log('Calificación extracurricular actualizada exitosamente:', response.data);
       return response.data;
     } catch (error: any) {
       console.error('Error al actualizar calificación extracurricular:', error);
@@ -731,8 +709,6 @@ const gradeService: IGradeService = {
   // Guardar evaluaciones de hábitos
   async saveHabitGrades(estudianteId: string, data: SaveHabitGradesRequest): Promise<void> {
     try {
-      console.log('Guardando evaluaciones de hábitos para estudiante:', estudianteId, data);
-      
       const response = await api.put(
         `/calificaciones-habitos/estudiante/${estudianteId}`,
         {
@@ -748,13 +724,6 @@ const gradeService: IGradeService = {
         }
       );
       
-      console.log('=== RESPUESTA DEL BACKEND ===');
-      console.log('Status:', response.status);
-      console.log('Status Text:', response.statusText);
-      console.log('Response Data:', response.data);
-      console.log('=== FIN RESPUESTA DEL BACKEND ===');
-      
-      console.log('Evaluaciones de hábitos guardadas exitosamente');
       return response.data;
     } catch (error) {
       console.error('Error al guardar evaluaciones de hábitos:', error);
@@ -765,40 +734,24 @@ const gradeService: IGradeService = {
   // Obtener evaluaciones de hábitos de un estudiante
   async getHabitGrades(estudianteId: string, periodoId: string): Promise<any[]> {
     try {
-      console.log(`=== INICIO getHabitGrades ===`);
-      console.log(`Obteniendo evaluaciones de hábitos para estudiante: ${estudianteId}, período: ${periodoId}`);
-      
       const response = await api.get(`/calificaciones-habitos/estudiante/${estudianteId}?periodoId=${periodoId}`);
       
-      console.log('=== RESPUESTA DEL ENDPOINT DE HÁBITOS ===');
-      console.log('Status:', response.status);
-      console.log('Datos recibidos:', JSON.stringify(response.data, null, 2));
-      
       if (!response.data) {
-        console.log('No se recibieron datos de evaluaciones de hábitos');
         return [];
       }
 
       // Si los datos vienen en un objeto con propiedad 'calificaciones'
       let habitData = Array.isArray(response.data) ? response.data : response.data.calificaciones || [];
       
-      console.log('=== ESTRUCTURA DE DATOS DE HÁBITOS (ANTES DE ENRIQUECER) ===');
-      console.log('Tipo de dato:', typeof response.data);
-      console.log('Es array:', Array.isArray(response.data));
-      console.log('Cantidad de evaluaciones de hábitos:', habitData.length);
-      
       // Obtener las tablas necesarias para enriquecer los datos
-      console.log('=== OBTENIENDO LISTAS COMPLETAS ===');
       
       // Obtener lista completa de materias
       const materiasResponse = await api.get('/materias');
       const todasLasMaterias = materiasResponse.data || [];
-      console.log('Total de materias obtenidas:', todasLasMaterias.length);
       
       // Obtener tabla de tipos de materia
       const tiposMateriaResponse = await api.get('/materias/tipos');
       const tiposMateria = tiposMateriaResponse.data || [];
-      console.log('Total de tipos de materia obtenidos:', tiposMateria.length);
       
       // Crear mapas para acceso rápido
       const materiasMap = new Map();
@@ -818,21 +771,8 @@ const gradeService: IGradeService = {
         const tipoMateriaId = materiaInfo?.tipoMateriaId || habito.tipoMateriaId || null;
         const tipoMateriaInfo = tipoMateriaId ? tiposMateriaMap.get(tipoMateriaId) : null;
         
-        // Debug information
-        console.log(`Buscando materia con ID: ${habito.evaluacionHabitoId}`);
-        console.log(`Total de materias disponibles: ${materiasMap.size}`);
-        console.log(`IDs de materias disponibles:`, Array.from(materiasMap.keys()).slice(0, 10));
-        
         if (!materiaInfo) {
-          console.warn(`No se encontró información para la materia con ID: ${habito.evaluacionHabitoId || 'no proporcionado'}`);
-          console.warn(`IDs disponibles:`, Array.from(materiasMap.keys()));
-        } else {
-          console.log(`Materia encontrada:`, {
-            id: materiaInfo.id,
-            nombre: materiaInfo.nombre,
-            tipoMateriaId: materiaInfo.tipoMateriaId,
-            esExtracurricular: materiaInfo.esExtracurricular
-          });
+          // Continuar sin información de materia
         }
         
         // Determinar si es extracurricular basado en múltiples fuentes
@@ -873,16 +813,6 @@ const gradeService: IGradeService = {
           ))
         );
         
-        console.log(`Evaluación "${habito.nombre}":`, {
-          evaluacionHabitoId: habito.evaluacionHabitoId,
-          materiaInfoEncontrada: !!materiaInfo,
-          tipoMateriaId: materiaInfo?.tipoMateriaId,
-          tipoMateriaNombre: tipoMateriaInfo?.nombre,
-          esExtracurricular,
-          esHogar,
-          esHabito
-        });
-        
         return {
           ...habito,
           // Agregar información completa de la materia
@@ -914,51 +844,9 @@ const gradeService: IGradeService = {
         };
       });
       
-      console.log('=== ESTRUCTURA DE DATOS DE HÁBITOS (DESPUÉS DE ENRIQUECER) ===');
-      console.log('Cantidad de evaluaciones de hábitos enriquecidas:', habitData.length);
-      
-      if (habitData.length > 0) {
-        console.log('Ejemplo de primera evaluación de hábito enriquecida:', JSON.stringify(habitData[0], null, 2));
-        
-        // Mostrar las propiedades de cada evaluación enriquecida
-        habitData.forEach((habito: any, index: number) => {
-          console.log(`Hábito ${index + 1}:`, {
-            id: habito.id,
-            evaluacionHabitoId: habito.evaluacionHabitoId,
-            nombre: habito.nombre || habito.materia?.nombre || 'Sin nombre',
-            u1: habito.u1,
-            u2: habito.u2,
-            u3: habito.u3,
-            u4: habito.u4,
-            comentario: habito.comentario,
-            esExtracurricular: habito.esExtracurricular,
-            tipoMateriaNombre: habito.tipoMateriaNombre,
-            tipoMateriaId: habito.tipoMateriaId,
-            codigo: habito.codigo,
-            materia: {
-              id: habito.materia?.id,
-              nombre: habito.materia?.nombre,
-              esExtracurricular: habito.materia?.esExtracurricular,
-              tipoMateriaId: habito.materia?.tipoMateriaId
-            },
-            tipoMateria: {
-              id: habito.tipoMateria?.id,
-              nombre: habito.tipoMateria?.nombre,
-              descripcion: habito.tipoMateria?.descripcion
-            }
-          });
-        });
-      }
-      
-      console.log('=== FIN getHabitGrades ===');
       return habitData;
     } catch (error: any) {
       console.error('Error al obtener evaluaciones de hábitos:', error);
-      console.error('Error details:', {
-        message: (error as Error).message,
-        status: error.response?.status,
-        data: error.response?.data
-      });
       return [];
     }
   },

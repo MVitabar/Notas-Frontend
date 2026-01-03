@@ -13,19 +13,25 @@ const styles = StyleSheet.create({
   },
   headerImage: {
     width: '100%',
-    height: 120, // Adjust based on your header image aspect ratio
+    height: 120,
     marginBottom: 8,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   footerImage: {
     width: '100%',
-    height: 80, // Adjust based on your footer image aspect ratio
+    height: 80,
     position: 'absolute',
     bottom: 0,
     left: 0,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   content: {
     padding: 10,
-    paddingBottom: 85, // Make space for the footer
+    paddingBottom: 85,
   },
   header: {
     flexDirection: 'row',
@@ -145,7 +151,7 @@ interface GradeReportPdfProps {
   data: {
     estudiante: Student;
     materias: Materia[];
-    habitos: any[]; // ← Nuevo: datos del endpoint de hábitos
+    habitos: any[];
     promedios: {
       u1: number;
       u2: number;
@@ -227,93 +233,21 @@ const GradeReportPdf = ({ data }: GradeReportPdfProps) => {
     u4: promedios?.u4 || 0
   };
 
-  const renderStudentInfo = () => (
-    <View style={styles.studentInfo}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
-        <Text style={{ fontSize: 9 }}>
-          <Text style={{ fontWeight: 'bold' }}>Nombre:</Text> {`${estudiante.nombre} ${estudiante.apellido}`}
-        </Text>
-        <Text style={{ fontSize: 9 }}>
-          <Text style={{ fontWeight: 'bold' }}>Grado:</Text> {estudiante.grado}
-        </Text>
-      </View>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <Text style={{ fontSize: 9 }}>
-          <Text style={{ fontWeight: 'bold' }}>DNI:</Text> {estudiante.dni}
-        </Text>
-        <Text style={{ fontSize: 9 }}>
-          <Text style={{ fontWeight: 'bold' }}>Sección:</Text> {estudiante.seccion}
-        </Text>
-      </View>
-    </View>
-  );
-
-  const renderTableHeader = (headers: string[], widths: string[]) => (
-    <View style={[styles.tableRow, styles.tableHeader]}>
-      {headers.map((header, index) => (
-        <Text 
-          key={index} 
-          style={[
-            styles.tableCell, 
-            { 
-              fontWeight: 'bold',
-              width: widths[index] || 'auto',
-              textAlign: index > 0 ? 'center' : 'left'
-            }
-          ]}
-        >
-          {header}
-        </Text>
-      ))}
-    </View>
-  );
-
-  const renderTableRow = (item: any, fields: string[], widths: string[] = [], highlight = false) => {
-    // Skip rendering if item is undefined or null
-    if (!item) return null;
-    
-    return (
-      <View 
-        key={item.id || item.nombre} 
-        style={[
-          styles.tableRow, 
-          highlight ? { backgroundColor: '#f5f5f5' } : {}
-        ]}
-      >
-        {fields.map((field, i) => {
-          const value = item[field];
-          const displayValue = value === null || value === undefined ? '' : value;
-          
-          return (
-            <Text 
-              key={i} 
-              style={[
-                styles.tableCell, 
-                { 
-                  width: widths[i] || 'auto',
-                  textAlign: i > 0 ? 'center' : 'left',
-                  fontSize: field === 'nombre' ? 10 : 11
-                }
-              ]}
-            >
-              {displayValue}
-            </Text>
-          );
-        })}
-      </View>
-    );
-  };
-
   return (
     <Document>
       <Page size={[8.5 * 72, 13 * 72]} style={styles.page}>
-        {/* Header Image - with fallback */}
-        {typeof window !== 'undefined' && (
-          <Image 
-            src="/header.png" 
-            style={styles.headerImage} 
-          />
-        )}
+        {/* Header */}
+        <View style={styles.headerImage}>
+          <Text style={{fontSize: 18, fontWeight: 'bold', color: '#0056b3'}}>
+            REPORTE DE CALIFICACIONES
+          </Text>
+          <Text style={{fontSize: 12, color: '#666', marginTop: 5}}>
+            Sistema de Gestión Académica
+          </Text>
+          <Text style={{fontSize: 10, color: '#999', marginTop: 2}}>
+            Año Lectivo {new Date().getFullYear()}
+          </Text>
+        </View>
         
         <View style={styles.content}>
           {/* Student Info */}
@@ -337,8 +271,8 @@ const GradeReportPdf = ({ data }: GradeReportPdfProps) => {
               <Text style={[styles.tableCell, {width: '12%', textAlign: 'center', fontWeight: 'bold'}]}>NOTAS FINALES</Text>
             </View>
             
-            {materias.map((materia: Materia) => (
-              <View key={materia.id} style={styles.tableRow}>
+            {materias.map((materia: Materia, index: number) => (
+              <View key={`materia-${index}`} style={styles.tableRow}>
                 <Text style={[styles.tableCell, {width: '40%'}]}>{materia.nombre_materia}</Text>
                 <Text style={[styles.tableCell, {width: '12%', textAlign: 'center'}]}>{materia.u1 || ''}</Text>
                 <Text style={[styles.tableCell, {width: '12%', textAlign: 'center'}]}>{materia.u2 || ''}</Text>
@@ -497,13 +431,15 @@ const GradeReportPdf = ({ data }: GradeReportPdfProps) => {
           </View>
         </View>
         
-        {/* Footer Image - with fallback */}
-        {typeof window !== 'undefined' && (
-          <Image 
-            src="/footer.png" 
-            style={styles.footerImage} 
-          />
-        )}
+        {/* Footer */}
+        <View style={styles.footerImage}>
+          <Text style={{fontSize: 9, color: '#666'}}>
+            © {new Date().getFullYear()} Sistema de Gestión Académica
+          </Text>
+          <Text style={{fontSize: 8, color: '#999', marginTop: 2}}>
+            Todos los derechos reservados
+          </Text>
+        </View>
       </Page>
     </Document>
   );

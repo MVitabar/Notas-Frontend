@@ -247,15 +247,11 @@ export function Dashboard() {
 
   // Manejar la edición de una calificación
   const handleEditGrade = (studentId: string, currentGrade: number | null, materiaId: string) => {
-    console.log('Iniciando handleEditGrade con:', { studentId, currentGrade, materiaId });
-    
     // Buscar la calificación existente
     const gradeToEdit = classGrades.find(
       g => g.estudianteId === studentId && 
            g.materiaId === materiaId
     );
-
-    console.log('Calificación encontrada para editar:', gradeToEdit);
 
     if (gradeToEdit) {
       console.log('Configurando formulario para editar calificación existente:', {
@@ -276,7 +272,6 @@ export function Dashboard() {
         comentario: gradeToEdit.comentario || "",
       });
       setEditingId(studentId);
-      console.log('Modo edición activado para estudiante:', studentId);
     } else {
       console.log('No se encontró calificación existente, preparando para crear una nueva');
       // Si no existe la calificación, preparar para crear una nueva
@@ -290,7 +285,6 @@ export function Dashboard() {
         return newState;
       });
       setEditingId(studentId);
-      console.log('Modo creación activado para estudiante:', studentId);
     }
   };
 
@@ -303,9 +297,6 @@ export function Dashboard() {
         alert('La calificación debe ser un número entre 0 y 100');
         return;
       }
-
-      // Aquí iría la lógica para guardar la calificación en la API
-      console.log(`Guardando calificación ${gradeValue} para el estudiante ${studentId}`);
 
       // Simular guardado
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -334,9 +325,12 @@ export function Dashboard() {
     staleTime: 5 * 60 * 1000, // 5 minutos
   });
 
-  const [expandedGrados, setExpandedGrados] = useState<Record<string, boolean>>(
-    {}
-  );
+  // Initialize expandedGrados with first grade expanded using useMemo
+  const [expandedGrados, setExpandedGrados] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    initial["grado-0"] = true;
+    return initial;
+  });
   const [selectedStudent, setSelectedStudent] = useState<Estudiante | null>(null);
   const [activeTab, setActiveTab] = useState<"info" | "grades" | "habitos" | "extraescolar">("info"); // 'info', 'grades', or 'extraescolar'
   const [extraescolarGrades, setExtraescolarGrades] = useState<Record<string, { id: string; valor: ValorConceptual; materiaId: string }>>({});
@@ -432,24 +426,17 @@ export function Dashboard() {
 
   // Load grades for a student
   const loadStudentGrades = async (studentId: string, periodoId: string) => {
-    console.group('=== INICIO loadStudentGrades ===');
-    console.log('Cargando calificaciones y hábitos para estudiante:', studentId, 'período:', periodoId);
-    
     try {
       setIsLoadingGrades(true);
       
       // Load regular and extracurricular grades
       const grades = await gradeService.getByStudent(studentId, periodoId);
-      console.log('Calificaciones obtenidas:', grades);
       
       // Load habit grades using the new endpoint
-      console.log('=== CARGANDO EVALUACIONES DE HÁBITOS ===');
       setLoadingHabitGrades(true);
       const habitData = await gradeService.getHabitGrades(studentId, periodoId);
       setHabitGrades(habitData);
       setLoadingHabitGrades(false);
-      console.log('=== EVALUACIONES DE HÁBITOS CARGADAS ===');
-      console.log('Total de evaluaciones de hábitos:', habitData.length);
 
       // Map the grades to the expected format
       const mappedGrades = grades.map((g: any) => {
@@ -476,57 +463,33 @@ export function Dashboard() {
           }
         };
         
-        console.log(`Mapeada calificación ID ${g.id}:`, {
-          materia: mappedGrade.materia.nombre,
-          calificacion: mappedGrade.calificacion,
-          periodo: mappedGrade.periodo.nombre,
-          estudiante: `${mappedGrade.estudiante.nombre} ${mappedGrade.estudiante.apellido}`
-        });
-        
         return mappedGrade;
       });
 
       // Get the student's grade name to identify extracurricular subjects
       const studentGradeName = selectedStudent?.grados?.[0];
-      console.log('Grado del estudiante:', studentGradeName);
       
       // Get extracurricular subjects from database
       const extraSubjectsList = getExtraescolarMaterias(studentGradeName || '');
-      console.log('Materias extraescolares para este grado:', extraSubjectsList);
 
       // Separate regular and extracurricular grades
       const regularGrades: CalificacionResponse[] = [];
       const extraGrades: Record<string, { id: string; valor: ValorConceptual; materiaId: string }> = {};
 
-      console.log('Separando calificaciones regulares y extraescolares...');
       mappedGrades.forEach((g: any) => {
         const esExtraescolar = g.esExtraescolar || isExtraescolar(g.materiaId);
-        console.log(`Procesando calificación ID ${g.id} (${g.materia?.nombre}):`, {
-          esExtraescolar: g.esExtraescolar,
-          nombreMateria: g.materia?.nombre,
-          materiaId: g.materiaId,
-          esExtraescolarPorFuncion: isExtraescolar(g.materiaId),
-          esExtraescolarFinal: esExtraescolar
-        });
 
         if (esExtraescolar && g.materia?.nombre) {
-          console.log(`Marcando como extraescolar: ${g.materia.nombre}`);
           extraGrades[g.materia.nombre] = {
             id: g.id,
             valor: g.valorConceptual || "",
             materiaId: g.materia.id
           };
         } else {
-          console.log(`Agregando a calificaciones regulares: ${g.materia?.nombre || 'sin nombre'}`);
           regularGrades.push(g);
         }
       });
 
-      console.log('Actualizando estado con las calificaciones cargadas');
-      console.log('Total de calificaciones regulares:', regularGrades.length);
-      console.log('Total de calificaciones extraescolares:', Object.keys(extraGrades).length);
-      console.log('Total de evaluaciones de hábitos:', habitData.length);
-      
       // Separar las evaluaciones de hábitos por tipo (excluyendo extraescolares)
       const hogarEvals = habitData.filter((h: any) => {
         // Usar múltiples fuentes para determinar si es HOGAR
@@ -534,14 +497,6 @@ export function Dashboard() {
                          h.tipoMateria?.nombre === 'HOGAR' ||
                          h.materia?.tipoMateria?.nombre === 'HOGAR' ||
                          h.tipo === 'HOGAR'; // ← Nuevo: campo directo del backend
-        
-        console.log(`Evaluación "${h.nombre}":`, {
-          tipoMateriaNombre: h.tipoMateriaNombre,
-          tipoMateria: h.tipoMateria?.nombre,
-          tipo: h.tipo, // ← Nuevo: campo directo del backend
-          esHogar,
-          evaluacionHabitoId: h.evaluacionHabitoId
-        });
         
         return esHogar;
       });
@@ -561,20 +516,8 @@ export function Dashboard() {
                          h.tipo === 'APRENDIZAJE' || // ← Nuevo: campo directo del backend
                          h.tipo === 'CASA'; // ← Nuevo: campo directo del backend
         
-        console.log(`Evaluación "${h.nombre}":`, {
-          tipoMateriaNombre: h.tipoMateriaNombre,
-          tipoMateria: h.tipoMateria?.nombre,
-          tipo: h.tipo, // ← Nuevo: campo directo del backend
-          esHabito,
-          evaluacionHabitoId: h.evaluacionHabitoId
-        });
-        
         return esHabito;
       });
-      
-      console.log('=== SEPARACIÓN DE EVALUACIONES POR TIPO ===');
-      console.log('Evaluaciones HOGAR:', hogarEvals.length);
-      console.log('Evaluaciones HABITO:', habitoEvals.length);
       
       // Cargar evaluaciones de hábitos regulares existentes
       const habitEvaluationsGradesData: Record<string, { id: string; valor: ValorConceptual; evaluacionHabitoId: string }> = {};
@@ -590,26 +533,9 @@ export function Dashboard() {
         }
       });
       
-      console.log('Evaluaciones de hábitos regulares cargadas:', Object.keys(habitEvaluationsGradesData).length);
-      
       // Separar evaluaciones extracurriculares de hábitos
       const extraescolarEvals = habitData.filter((h: any) => {
         return h.tipo === 'EXTRACURRICULAR';
-      });
-      
-      console.log('=== ANÁLISIS DE EVALUACIONES EXTRACURRICULARES ===');
-      console.log('Total de evaluaciones extracurriculares encontradas:', extraescolarEvals.length);
-      extraescolarEvals.forEach((evaluacion: any, index: number) => {
-        console.log(`Evaluación extracurricular ${index + 1}:`, {
-          nombre: evaluacion.nombre,
-          evaluacionHabitoId: evaluacion.evaluacionHabitoId,
-          u1: evaluacion.u1,
-          u2: evaluacion.u2,
-          u3: evaluacion.u3,
-          u4: evaluacion.u4,
-          id: evaluacion.id,
-          tieneValorGuardado: !!(evaluacion.u1 || evaluacion.u2 || evaluacion.u3 || evaluacion.u4)
-        });
       });
       
       // Cargar evaluaciones extracurriculares existentes
@@ -626,18 +552,6 @@ export function Dashboard() {
         };
       });
       
-      console.log('Evaluaciones EXTRACURRICULARES:', extraescolarEvals.length);
-      console.log('Datos de evaluaciones extracurriculares:', extraescolarEvals.map(e => ({
-        nombre: e.nombre,
-        evaluacionHabitoId: e.evaluacionHabitoId,
-        u1: e.u1,
-        u2: e.u2,
-        u3: e.u3,
-        u4: e.u4,
-        id: e.id
-      })));
-      console.log('Evaluaciones extraescolares cargadas:', Object.keys(extraescolarHabitGradesData).length);
-      
       setGrades(regularGrades);
       setExtraescolarGrades(extraGrades);
       setHogarEvaluations(hogarEvals);
@@ -645,8 +559,6 @@ export function Dashboard() {
       setHabitEvaluationsGrades(habitEvaluationsGradesData); // ← Nuevo: cargar hábitos regulares
       setExtraescolarHabitGrades(extraescolarHabitGradesData);
       
-      console.log('Estado actualizado correctamente');
-      console.groupEnd();
     } catch (error) {
       console.error("Error al cargar calificaciones del estudiante:", error);
       toast.error("No se pudieron cargar las calificaciones");
@@ -714,6 +626,16 @@ export function Dashboard() {
         })),
       }));
     },
+    enabled: !!currentPeriod, // Only run when we have a current period
+    staleTime: 5 * 60 * 1000, // 5 minutes cache
+    retry: (failureCount, error: any) => {
+      // Don't retry network errors immediately, wait longer
+      if (error?.isNetworkError) {
+        return failureCount < 3; // Max 3 retries for network errors
+      }
+      return failureCount < 2; // Max 2 retries for other errors
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000), // Exponential backoff
   });
 
   // Obtener bimestres del backend para el período actual
@@ -725,18 +647,10 @@ export function Dashboard() {
     queryKey: ["bimestres", currentPeriod?.id],
     queryFn: async () => {
       if (!currentPeriod?.id) {
-        console.log(
-          "❌ No hay ID de período, no se pueden cargar los bimestres"
-        );
         return [];
       }
-      console.log(
-        "🔍 Solicitando bimestres para el período:",
-        currentPeriod.id
-      );
       try {
         const data = await dashboardService.getBimestres(currentPeriod.id);
-        console.log("📊 Bimestres recibidos del backend:", data);
         return data;
       } catch (error) {
         console.error("❌ Error al obtener los bimestres:", error);
@@ -745,16 +659,14 @@ export function Dashboard() {
     },
     enabled: !!currentPeriod?.id, // Solo ejecutar si hay un ID de período
     staleTime: 5 * 60 * 1000, // 5 minutos de caché
+    retry: (failureCount, error: any) => {
+      if (error?.isNetworkError) {
+        return failureCount < 3;
+      }
+      return failureCount < 2;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
   });
-
-  // Depuración: Mostrar el estado actual de los datos
-  useEffect(() => {
-    console.log("📌 Estado actual de los datos:");
-    console.log("- currentPeriod:", currentPeriod);
-    console.log("- bimestres:", bimestres);
-    console.log("- isLoadingBimestres:", isLoadingBimestres);
-    console.log("- bimestresError:", bimestresError);
-  }, [currentPeriod, bimestres, isLoadingBimestres, bimestresError]);
 
   // Convert the data to use our extended types
   const grados = useMemo<GradoInfo[]>(() => {
@@ -798,68 +710,56 @@ export function Dashboard() {
     isLoadingPeriod ||
     isLoadingBimestres;
 
-  // Mostrar todos los grados disponibles
-  const [filteredGrados, setFilteredGrados] = useState<GradoConMaterias[]>([]);
-  const [filteredStudents, setFilteredStudents] = useState<Estudiante[]>([]);
+  // Mostrar todos los grados disponibles - use useMemo instead of useEffect
+  const filteredGrados = useMemo(() => {
+    // Si no hay grados pero hay materias, mostrar un grado por defecto
+    const hasMaterias = teacherProfile?.materias && teacherProfile.materias.length > 0;
 
-
-
-  useEffect(() => {
-    const updateFilteredGrados = () => {
-      // Si no hay grados pero hay materias, mostrar un grado por defecto
-      const hasMaterias = teacherProfile?.materias && teacherProfile.materias.length > 0;
-
-      if (grados.length === 0 && hasMaterias) {
-        console.log("No se encontraron grados, mostrando materias sin agrupar");
-        const defaultGrado: GradoConMaterias = {
-          grado: "Sin grado asignado",
-          nivel: "N/A",
-          seccion: "N/A",
-          materias: teacherProfile!.materias!.map((m) => {
-            const materia = m.materia || m;
-            return {
-              id: String(materia.id || ""),
-              nombre: materia.nombre || "Sin nombre",
-              descripcion: "descripcion" in materia ? String(materia.descripcion || "") : "",
-              grado: "grado" in materia ? String(materia.grado || "N/A") : "N/A",
-              nivel: "nivel" in materia ? String(materia.nivel || "N/A") : "N/A",
-              seccion: "seccion" in materia ? String(materia.seccion || "N/A") : "N/A",
-              docenteId: "docenteId" in materia ? Number(materia.docenteId || 0) : 0,
-              estudiantes: "estudiantes" in materia ? Number(materia.estudiantes || 0) : 0,
-            };
-          }),
-          totalEstudiantes: 0,
-          estudiantes: [],
-        };
-        setFilteredGrados([defaultGrado]);
-      } else {
-        setFilteredGrados(grados as unknown as GradoConMaterias[]);
-      }
-    };
-
-    updateFilteredGrados();
+    if (grados.length === 0 && hasMaterias) {
+      console.log("No se encontraron grados, mostrando materias sin agrupar");
+      const defaultGrado: GradoConMaterias = {
+        grado: "Sin grado asignado",
+        nivel: "N/A",
+        seccion: "N/A",
+        materias: teacherProfile!.materias!.map((m) => {
+          const materia = m.materia || m;
+          return {
+            id: String(materia.id || ""),
+            nombre: materia.nombre || "Sin nombre",
+            descripcion: "descripcion" in materia ? String(materia.descripcion || "") : "",
+            grado: "grado" in materia ? String(materia.grado || "N/A") : "N/A",
+            nivel: "nivel" in materia ? String(materia.nivel || "N/A") : "N/A",
+            seccion: "seccion" in materia ? String(materia.seccion || "N/A") : "N/A",
+            docenteId: "docenteId" in materia ? Number(materia.docenteId || 0) : 0,
+            estudiantes: "estudiantes" in materia ? Number(materia.estudiantes || 0) : 0,
+          };
+        }),
+        totalEstudiantes: 0,
+        estudiantes: [],
+      };
+      return [defaultGrado];
+    } else {
+      return grados as unknown as GradoConMaterias[];
+    }
   }, [grados, teacherProfile]);
 
-  // Filter students based on search term
-  useEffect(() => {
+  // Filter students based on search term - use useMemo instead of useEffect
+  const filteredStudents = useMemo(() => {
     if (!students) {
-      setFilteredStudents([]);
-      return;
+      return [];
     }
 
     if (!searchTerm) {
-      setFilteredStudents(students);
-      return;
+      return students;
     }
 
     const term = searchTerm.toLowerCase();
-    const filtered = students.filter(
+    return students.filter(
       (student) =>
         student.nombre?.toLowerCase().includes(term) ||
         student.apellido?.toLowerCase().includes(term) ||
         student.dni?.includes(term)
     );
-    setFilteredStudents(filtered);
   }, [students, searchTerm]);
 
   const [classGrades, setClassGrades] = useState<CalificacionResponse[]>([]);
@@ -872,8 +772,10 @@ export function Dashboard() {
   const [hogarEvaluations, setHogarEvaluations] = useState<any[]>([]);
   const [habitoEvaluations, setHabitoEvaluations] = useState<any[]>([]);
 
-  // Fetch materias from database
+  // Fetch materias from database with debouncing to reduce API calls
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
     const fetchMaterias = async () => {
       try {
         setLoadingMaterias(true);
@@ -887,8 +789,11 @@ export function Dashboard() {
       }
     };
 
-    fetchMaterias();
-  }, []);
+    // Debounce the API call to reduce concurrent requests
+    timeoutId = setTimeout(fetchMaterias, 100);
+
+    return () => clearTimeout(timeoutId);
+  }, []); // Only run once on mount
 
   // Function to check if a materia is extracurricular
   const isExtraescolar = (materiaId: string) => {
@@ -906,17 +811,6 @@ export function Dashboard() {
       materia.seccion === grado
     );
   }, [materias, loadingMaterias]);
-
-  useEffect(() => {
-    if (filteredGrados.length > 0) {
-      // Auto-expand the first grade if it has students
-      const firstGradoId = "grado-0";
-      setExpandedGrados(prev => ({
-        ...prev,
-        [firstGradoId]: true
-      }));
-    }
-  }, [filteredGrados]);
 
   // Fetch grades for the selected class context
   useEffect(() => {
@@ -940,16 +834,14 @@ export function Dashboard() {
           const bimestreObj = bimestres.find(b => b.numero.toString() === selectedBimester);
           
           if (bimestreObj && currentPeriod?.id) {
-            console.log(`📡 Fetching grades for materia: ${materia.id}, grado: ${grado}, nivel: ${nivel}, periodo: ${currentPeriod.id}`);
-            
             // Format the grade parameter as expected by the backend (e.g., "1" for grade, "Primaria" for level)
-            console.log('📊 Fetching grades with:', {
+            const params = {
               materiaId: materia.id,
               grado: grado,
               nivel: nivel,
               seccion: seccion,
               periodoId: currentPeriod.id
-            });
+            };
             
             // Format the grade parameter to include both grade and level
             const gradoCompleto = `${grado}° ${nivel}${seccion ? ` ${seccion}` : ''}`;
@@ -962,9 +854,7 @@ export function Dashboard() {
               nivel          // nivel (e.g., "Primaria")
             );
             
-            console.log('📊 Grades API Response:', response);
-
-            console.log('📊 Grades received from API:', response);
+            // Process the response
             
             // Transform the response to match the CalificacionResponse type
             const transformedGrades: CalificacionResponse[] = response.flatMap(item => 
@@ -1004,7 +894,6 @@ export function Dashboard() {
               } as CalificacionResponse))
             );
 
-            console.log('🔄 Transformed grades:', transformedGrades);
             setClassGrades(transformedGrades);
 
             // Update students list from the response
@@ -1036,7 +925,7 @@ export function Dashboard() {
     };
 
     fetchClassGrades();
-  }, [selectedGrade, selectedBimester, currentPeriod, filteredGrados, bimestres]);
+  }, [selectedGrade, selectedBimester, currentPeriod?.id]);
 
   const getPromedioBimestre = (materia: Materia, bimestre: number): string => {
     switch (bimestre) {
