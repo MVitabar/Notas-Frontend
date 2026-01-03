@@ -573,6 +573,17 @@ export function Dashboard() {
     if (selectedStudent && currentPeriod) {
       loadStudentGrades(selectedStudent.id, currentPeriod.id);
       loadEvaluationPeriods(currentPeriod.id);
+      // Load habit grades using the same logic as in loadStudentGrades
+      setLoadingHabitGrades(true);
+      gradeService.getHabitGrades(selectedStudent.id, currentPeriod.id)
+        .then(habitData => {
+          setHabitGrades(habitData);
+          setLoadingHabitGrades(false);
+        })
+        .catch(error => {
+          console.error('Error loading habit grades:', error);
+          setLoadingHabitGrades(false);
+        });
     }
   }, [selectedStudent, currentPeriod]);
 
