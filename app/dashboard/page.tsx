@@ -464,7 +464,82 @@ export function Dashboard() {
       setLoadingHabitGrades(true);
       const habitData = await gradeService.getHabitGrades(studentId, periodoId);
       
-      setHabitGrades(habitData);
+      // 🔥 IMPORTANTE: Obtener TODOS los hábitos disponibles de la base de datos
+      const todasLasMaterias = await dashboardService.getMaterias();
+      
+      // 🔥 FILTRAR: Obtener solo las materias que son hábitos (usando mismo mapeo que PDF)
+      
+      // IDs directos de la base de datos (mismo enfoque que PDF)
+      const HOGAR_ID = "e133dce1-bb77-4b05-bdcb-0dc5d4c5df19";
+      const HABITO_ID = "16b47d65-2cb9-4c2e-8779-9e2f5576d896";
+      const EXTRACURRICULAR_ID = "d4965c36-c72a-43bb-8645-0e671df356c2";
+      
+      let habitosMaterias = todasLasMaterias.filter((materia: any) => {
+        return materia.tipoMateriaId === HOGAR_ID || 
+               materia.tipoMateriaId === HABITO_ID || 
+               materia.tipoMateriaId === EXTRACURRICULAR_ID ||
+               materia.esExtracurricular === true;
+      });
+      
+      // 🔥 SI NO HAY MATERIAS DISPONIBLES, USAR LOS HÁBITOS CON CALIFICACIONES
+      if (habitosMaterias.length === 0 && habitData.length > 0) {
+        console.log('🔥 Dashboard - No hay materias disponibles, usando hábitos con calificaciones');
+        habitosMaterias = habitData.map((h: any) => ({
+          id: h.evaluacionHabitoId || h.id,
+          nombre: h.nombre || h.materia?.nombre || 'Hábito sin nombre',
+          tipoMateriaId: h.tipoMateriaId || h.materia?.tipoMateriaId,
+          esExtracurricular: h.esExtracurricular || false,
+          // Propiedades requeridas por MateriaResponse (valores por defecto)
+          docenteId: '',
+          materiaId: h.evaluacionHabitoId || h.id,
+          seccion: '',
+          horario: '',
+          descripcion: '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          grados: h.materia?.grados || [],
+          tipoMateria: h.tipoMateria || h.materia?.tipoMateria || null
+        })) as any;
+      }
+      
+      // 🔥 DEBUG: Mostrar todos los hábitos disponibles
+      console.log('🔍 Dashboard - Todas las materias:', todasLasMaterias.length);
+      console.log('🔍 Dashboard - Materias de hábitos:', habitosMaterias.length);
+      console.log('🔍 Dashboard - Hábitos con calificaciones:', habitData.length);
+      
+      // 🔥 Combinar: mostrar todos los hábitos, pero enriquecer los que tienen calificaciones
+      let habitosCombinados = habitosMaterias.map((materia: any) => {
+        // Buscar si esta materia tiene calificaciones como hábito
+        const habitConCalificacion = habitData.find((h: any) => h.evaluacionHabitoId === materia.id);
+        
+        if (habitConCalificacion) {
+          // Si tiene calificaciones, usar esos datos
+          return habitConCalificacion;
+        } else {
+          // Si no tiene calificaciones, crear estructura básica
+          return {
+            ...materia,
+            nombre: materia.nombre,
+            evaluacionHabitoId: materia.id,
+            u1: null,
+            u2: null,
+            u3: null,
+            u4: null,
+            comentario: null,
+            calificaciones: [],
+            materia: materia, // ← Mantener referencia a la materia
+            tipo: materia.tipoMateria?.nombre || 'SIN TIPO',
+            tipoMateriaNombre: materia.tipoMateria?.nombre || 'SIN TIPO'
+          };
+        }
+      });
+      
+      // 🔥 IMPORTANTE: NO FILTRAR POR GRADO para coincidir con el PDF
+      // El PDF muestra todos los hábitos con calificaciones sin filtrar por grado
+      // El dashboard debe hacer lo mismo para mantener consistencia
+      console.log(`🔍 Dashboard - Hábitos totales (sin filtrar por grado): ${habitosCombinados.length}`);
+      
+      setHabitGrades(habitosCombinados);
       setLoadingHabitGrades(false);
 
       // Map the grades to the expected format
@@ -513,33 +588,18 @@ export function Dashboard() {
         }
       });
 
-      // Separar las evaluaciones de hábitos por tipo (excluyendo extraescolares)
+      // Separar las evaluaciones de hábitos por tipo (usando mismo enfoque que PDF)
       
-      // IDs de los tipos de materia
-      const HOGAR_ID = 'e133dce1-bb77-4b05-bdcb-0dc5d4c5df19';
-      const HABITO_ID = '16b47d65-2cb9-4c2e-8779-9e2f5576d896';
-      
-      const hogarEvals = habitData.filter((h: any) => {
-        const esHogar = h.esHogar === true || 
-                       h.tipoMateriaNombre === 'HOGAR' || 
-                       h.tipoMateria?.nombre === 'HOGAR' ||
-                       h.tipo === 'HOGAR' ||
-                       h.materia?.tipoMateriaId === HOGAR_ID; // ← Usar el ID directamente
-        return esHogar;
+      const hogarEvals = habitosCombinados.filter((h: any) => {
+        return h.tipoMateriaId === HOGAR_ID || 
+               h.tipo === 'HOGAR' ||
+               h.tipoMateriaNombre === 'HOGAR';
       });
       
-      const habitoEvals = habitData.filter((h: any) => {
-        const esHabito = h.esHabito === true || 
-                       h.tipoMateriaNombre === 'HABITO' || 
-                       h.tipoMateriaNombre === 'COMPORTAMIENTO' || 
-                       h.tipoMateriaNombre === 'APRENDIZAJE' || 
-                       h.tipoMateriaNombre === 'CASA' ||
-                       h.tipo === 'HABITO' || 
-                       h.tipo === 'COMPORTAMIENTO' || 
-                       h.tipo === 'APRENDIZAJE' || 
-                       h.tipo === 'CASA' ||
-                       h.materia?.tipoMateriaId === HABITO_ID; // ← Usar el ID directamente
-        return esHabito;
+      const habitoEvals = habitosCombinados.filter((h: any) => {
+        return h.tipoMateriaId === HABITO_ID || 
+               h.tipo === 'HABITO' ||
+               h.tipoMateriaNombre === 'HABITO';
       });
       
       // Cargar evaluaciones de hábitos regulares existentes
@@ -557,8 +617,11 @@ export function Dashboard() {
       });
       
       // Separar evaluaciones extracurriculares de hábitos
-      const extraescolarEvals = habitData.filter((h: any) => {
-        return h.tipo === 'EXTRACURRICULAR';
+      const extraescolarEvals = habitosCombinados.filter((h: any) => {
+        return h.tipoMateriaId === EXTRACURRICULAR_ID || 
+               h.tipo === 'EXTRACURRICULAR' ||
+               h.tipoMateriaNombre === 'EXTRACURRICULAR' ||
+               h.esExtracurricular === true;
       });
       
       // Cargar evaluaciones extracurriculares existentes
