@@ -105,6 +105,10 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
           periodo.id
         );
 
+        console.log('🔍 PDF - Calificaciones recibidas:', grades);
+        console.log('🔍 PDF - Total de calificaciones:', grades.length);
+        console.log('🔍 PDF - Estructura de primera calificación:', grades[0]);
+
         // 2. Inicializar estructura de hábitos con valores por defecto
         let habitData: {
           habitos_casa: HabitGrade[];
@@ -203,25 +207,22 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
 
         for (const grade of grades as Grade[]) {
           const materia = grade.materia || {};
-          const calificacion: Calificacion = grade.calificacion || {};
           
-          // Helper function to safely convert grade values
-          const getGradeValue = (evaluation: string | null | undefined, grade: any): string | number => {
-            if (evaluation !== null && evaluation !== undefined) return evaluation;
-            const num = Number(grade);
-            return isNaN(num) ? 0 : num;
-          };
+          // 🔥 CORRECCIÓN: La calificación viene directamente como número
+          const calificacionValor = (grade as any).calificacion || 0;
+          
+          console.log('🔍 Procesando materia:', materia.nombre, 'con calificación:', calificacionValor);
           
           const materiaData = {
             id: materia.id || `materia-${Math.random().toString(36).substr(2, 9)}`,
             nombre: materia.nombre || 'Materia sin nombre',
             tipoMateria: materia.tipoMateria || 'Sin tipo',
             tipoMateriaId: materia.tipoMateriaId,
-            u1: getGradeValue(calificacion.evaluacion?.u1, calificacion.u1),
-            u2: getGradeValue(calificacion.evaluacion?.u2, calificacion.u2),
-            u3: getGradeValue(calificacion.evaluacion?.u3, calificacion.u3),
-            u4: getGradeValue(calificacion.evaluacion?.u4, calificacion.u4),
-            final: Number(calificacion.promedio) || 0
+            u1: calificacionValor,  // ← Usar la calificación directa
+            u2: 0,                  // ← Por ahora solo u1 tiene valor
+            u3: 0,
+            u4: 0,
+            final: calificacionValor // ← Usar la calificación como final
           };
           
           // Verificar si es extracurricular por tipoMateriaId

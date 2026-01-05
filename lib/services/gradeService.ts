@@ -450,8 +450,8 @@ const gradeService: IGradeService = {
         comentario: calificacion.comentario || '',
         tipoCalificacion: calificacion.tipoCalificacion,
         ...(calificacion.valorConceptual && { valorConceptual: calificacion.valorConceptual }),
-        ...(calificacion.esExtraescolar !== undefined && { esExtraescolar: calificacion.esExtraescolar }),
         ...(calificacion.nombreMateria && { nombreMateria: calificacion.nombreMateria })
+        // 🔥 REMOVIDO: esExtraescolar - el backend no lo acepta para actualizaciones
       };
 
       console.log('Enviando petición PUT a:', `/calificaciones/${id}`);

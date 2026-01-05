@@ -15,6 +15,18 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 120,
     marginBottom: 8,
+    position: 'relative',
+  },
+  yearOverlay: {
+    position: 'absolute',
+    top: 20,
+    left: 80,
+    padding: '8px 16px',
+    borderRadius: 8,
+    fontSize: 40,
+    fontWeight: 'normal',
+    color: '#000205ff',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
   },
   footerImage: {
     width: '100%',
@@ -217,7 +229,7 @@ const GradeReportPdf = ({ data }: GradeReportPdfProps) => {
     );
   }
   
-  const { estudiante, materias, promedios } = categorizedData;
+  const { estudiante, materias, promedios, periodo } = categorizedData;
   
   // Validar que promedios exista y tenga valores
   const safePromedios = {
@@ -230,7 +242,7 @@ const GradeReportPdf = ({ data }: GradeReportPdfProps) => {
   return (
     <Document>
       <Page size={[8.5 * 72, 13 * 72]} style={styles.page}>
-        {/* Header con imagen y fallback */}
+        {/* Header con imagen y año del período */}
         <View style={styles.headerImage}>
           <Image 
             src="/header.png" 
@@ -240,7 +252,13 @@ const GradeReportPdf = ({ data }: GradeReportPdfProps) => {
               objectFit: 'contain'
             }}
           />
+          {/* Año del período sobre el header */}
+          <View style={styles.yearOverlay}>
+            <Text>{periodo.nombre.split('-')[0]}</Text>
+          </View>
         </View>
+        
+        
         
         <View style={styles.content}>
           {/* Student Info */}
@@ -248,8 +266,7 @@ const GradeReportPdf = ({ data }: GradeReportPdfProps) => {
             <Text style={{fontSize: 16, fontWeight: 'bold', marginBottom: 5}}>
               {estudiante.nombre} {estudiante.apellido}
             </Text>
-            <Text style={{fontSize: 12}}>Grado: {estudiante.grado} - Sección: {estudiante.seccion}</Text>
-            <Text style={{fontSize: 12}}>Año: {estudiante.anio}</Text>
+            <Text style={{fontSize: 12}}>Grado: {estudiante.grado}</Text>
           </View>
 
           {/* Áreas Académicas */}

@@ -81,7 +81,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // If no token or user data, redirect to login
         if (!storedToken || !storedUser) {
-          console.log('No token or user data found, redirecting to login');
           router.push('/login');
           setLoading(false);
           return;
@@ -89,7 +88,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // Check if session is expired
         if (expiresAt && Date.now() > parseInt(expiresAt)) {
-          console.log('Session expired, logging out');
           logout();
           setLoading(false);
           return;
@@ -106,7 +104,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           const data = response.data;
-          console.log('Auth/me response:', data);
 
           // Normalize user data
           const userData: User = {
@@ -119,8 +116,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             requiresPasswordChange: data.data?.requiresPasswordChange || data.requiresPasswordChange || false,
           };
 
-          console.log('Processed user data:', userData);
-
           // Update state and localStorage
           setUser(userData);
           setToken(storedToken);
@@ -132,12 +127,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           // Handle redirection based on role
           const currentPath = window.location.pathname;
-          console.log('Current path:', currentPath, 'User role:', userData.rol);
 
           // If password change required (first-time login)
           if (userData.requiresPasswordChange) {
             if (currentPath !== '/change-password') {
-              console.log('Password change required, redirecting to change-password');
               // Store the intended destination before redirecting
               const redirectPath = userData.rol === 'ADMIN' ? '/admin' : '/dashboard';
               localStorage.setItem('redirectAfterPasswordChange', redirectPath);
@@ -150,7 +143,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Handle admin routes
           if (userData.rol === 'ADMIN') {
             if (!currentPath.startsWith('/admin') && currentPath !== '/') {
-              console.log('Admin user, redirecting to /admin');
               router.push('/admin');
             }
             return;
@@ -159,14 +151,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Handle teacher routes
           if (userData.rol === 'DOCENTE') {
             if (!currentPath.startsWith('/dashboard') && currentPath !== '/') {
-              console.log('Teacher user, redirecting to /dashboard');
               router.push('/dashboard');
             }
             return;
           }
 
         } catch (error) {
-          console.error('Error verifying session:', error);
           // Only logout if we're not already on the login page
           if (window.location.pathname !== '/login') {
             logout();
@@ -201,7 +191,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       const data = await response.json();
-      console.log('Login response:', data);
 
       if (!response.ok) {
         return { 
@@ -213,14 +202,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Obtener el token de la respuesta
       const authToken = data.access_token || data.token || data.data?.token;
       if (!authToken) {
-        console.error('No se recibió token en la respuesta:', data);
         return { 
           success: false, 
           error: "Error en la autenticación: token no recibido" 
         };
       }
-      
-      console.log('Token recibido:', authToken);
 
       // Obtener los datos del usuario
       let userData: User;
@@ -270,8 +256,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
       
-      console.log('Datos del usuario normalizados:', userData);
-
       // Guardar en el estado
       setUser(userData);
       setToken(authToken);
@@ -281,7 +265,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem("token", authToken);
         localStorage.setItem("user", JSON.stringify(userData));
         localStorage.setItem("expiresAt", (Date.now() + SESSION_DURATION_MS).toString());
-        console.log('Datos guardados en localStorage');
       }
 
       // Manejar redirección basada en el rol
@@ -316,12 +299,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { 
         success: false, 
         error: error instanceof Error ? error.message : "Error de conexión" 
-      }
+      };
     }
   }
 
   const logout = () => {
-    console.log('Logging out...');
     // Clear state
     setUser(null);
     setToken(null);
@@ -335,7 +317,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     // Only redirect if we're not already on the login page
     if (window.location.pathname !== '/login') {
-      console.log('Redirecting to login');
       router.push('/login');
     }
   }

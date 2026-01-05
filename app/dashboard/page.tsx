@@ -47,6 +47,7 @@ import {
   Search,
   Check,
   Pencil,
+  Edit,
   BookOpen,
   User,
   Calendar,
@@ -262,26 +263,23 @@ export function Dashboard() {
         valorConceptual: gradeToEdit.valorConceptual,
         comentario: gradeToEdit.comentario
       });
-      
+      // 🔥 CONFIGURAR newGrade con los datos de la calificación existente
       setNewGrade({
         materiaId: gradeToEdit.materiaId,
         tipoCalificacion: gradeToEdit.tipoCalificacion,
         tipoEvaluacion: gradeToEdit.tipoEvaluacion,
         calificacion: gradeToEdit.calificacion || undefined,
         valorConceptual: gradeToEdit.valorConceptual || undefined,
-        comentario: gradeToEdit.comentario || "",
+        comentario: gradeToEdit.comentario || ''
       });
       setEditingId(studentId);
     } else {
-      console.log('No se encontró calificación existente, preparando para crear una nueva');
-      // Si no existe la calificación, preparar para crear una nueva
       setNewGrade(prev => {
         const newState = {
           ...prev,
           materiaId,
           calificacion: currentGrade || undefined,
         };
-        console.log('Nuevo estado para calificación:', newState);
         return newState;
       });
       setEditingId(studentId);
@@ -298,12 +296,42 @@ export function Dashboard() {
         return;
       }
 
-      // Simular guardado
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Encontrar la calificación existente para este estudiante
+      const existingGrade = classGrades.find(g => g.estudianteId === studentId);
+      
+      if (!existingGrade) {
+        alert('No se encontró una calificación existente para este estudiante');
+        return;
+      }
+
+      // 🔥 USAR EL SISTEMA REAL DE GUARDADO
+      // Preparar los datos para actualizar usando el mismo formato que handleSaveGrade
+      const gradeData = {
+        calificacion: gradeValue,
+        comentario: existingGrade.comentario || '',
+        tipoCalificacion: existingGrade.tipoCalificacion || 'NUMERICA',
+        ...(existingGrade.valorConceptual && { valorConceptual: existingGrade.valorConceptual }),
+        ...(existingGrade.nombreMateria && { nombreMateria: existingGrade.nombreMateria })
+      };
+
+      // Actualizar la calificación usando el gradeService
+      const updatedGrade = await gradeService.update(existingGrade.id, gradeData);
+      
+      // Actualizar el estado local
+      setClassGrades(prevGrades => 
+        prevGrades.map(g => 
+          g.id === existingGrade.id 
+            ? { ...g, calificacion: gradeValue }
+            : g
+        )
+      );
 
       // Actualizar la interfaz
       setEditingId(null);
-      // En una implementación real, actualizaríamos el estado con la respuesta de la API
+      setEditValue(''); // Limpiar el valor de edición
+      
+      toast.success("Calificación actualizada correctamente");
+      
     } catch (error) {
       console.error('Error al guardar la calificación:', error);
       alert('Error al guardar la calificación');
@@ -435,6 +463,7 @@ export function Dashboard() {
       // Load habit grades using the new endpoint
       setLoadingHabitGrades(true);
       const habitData = await gradeService.getHabitGrades(studentId, periodoId);
+      
       setHabitGrades(habitData);
       setLoadingHabitGrades(false);
 
@@ -466,12 +495,6 @@ export function Dashboard() {
         return mappedGrade;
       });
 
-      // Get the student's grade name to identify extracurricular subjects
-      const studentGradeName = selectedStudent?.grados?.[0];
-      
-      // Get extracurricular subjects from database
-      const extraSubjectsList = getExtraescolarMaterias(studentGradeName || '');
-
       // Separate regular and extracurricular grades
       const regularGrades: CalificacionResponse[] = [];
       const extraGrades: Record<string, { id: string; valor: ValorConceptual; materiaId: string }> = {};
@@ -491,31 +514,31 @@ export function Dashboard() {
       });
 
       // Separar las evaluaciones de hábitos por tipo (excluyendo extraescolares)
+      
+      // IDs de los tipos de materia
+      const HOGAR_ID = 'e133dce1-bb77-4b05-bdcb-0dc5d4c5df19';
+      const HABITO_ID = '16b47d65-2cb9-4c2e-8779-9e2f5576d896';
+      
       const hogarEvals = habitData.filter((h: any) => {
-        // Usar múltiples fuentes para determinar si es HOGAR
-        const esHogar = h.tipoMateriaNombre === 'HOGAR' || 
-                         h.tipoMateria?.nombre === 'HOGAR' ||
-                         h.materia?.tipoMateria?.nombre === 'HOGAR' ||
-                         h.tipo === 'HOGAR'; // ← Nuevo: campo directo del backend
-        
+        const esHogar = h.esHogar === true || 
+                       h.tipoMateriaNombre === 'HOGAR' || 
+                       h.tipoMateria?.nombre === 'HOGAR' ||
+                       h.tipo === 'HOGAR' ||
+                       h.materia?.tipoMateriaId === HOGAR_ID; // ← Usar el ID directamente
         return esHogar;
       });
       
       const habitoEvals = habitData.filter((h: any) => {
-        // Usar múltiples fuentes para determinar si es HABITO/COMPORTAMIENTO/APRENDIZAJE/CASA
-        const esHabito = h.tipoMateriaNombre === 'HABITO' || 
-                         h.tipoMateriaNombre === 'COMPORTAMIENTO' ||
-                         h.tipoMateriaNombre === 'APRENDIZAJE' ||
-                         h.tipoMateriaNombre === 'CASA' ||
-                         h.tipoMateria?.nombre === 'HABITO' ||
-                         h.tipoMateria?.nombre === 'COMPORTAMIENTO' ||
-                         h.tipoMateria?.nombre === 'APRENDIZAJE' ||
-                         h.tipoMateria?.nombre === 'CASA' ||
-                         h.tipo === 'HABITO' || // ← Nuevo: campo directo del backend
-                         h.tipo === 'COMPORTAMIENTO' || // ← Nuevo: campo directo del backend
-                         h.tipo === 'APRENDIZAJE' || // ← Nuevo: campo directo del backend
-                         h.tipo === 'CASA'; // ← Nuevo: campo directo del backend
-        
+        const esHabito = h.esHabito === true || 
+                       h.tipoMateriaNombre === 'HABITO' || 
+                       h.tipoMateriaNombre === 'COMPORTAMIENTO' || 
+                       h.tipoMateriaNombre === 'APRENDIZAJE' || 
+                       h.tipoMateriaNombre === 'CASA' ||
+                       h.tipo === 'HABITO' || 
+                       h.tipo === 'COMPORTAMIENTO' || 
+                       h.tipo === 'APRENDIZAJE' || 
+                       h.tipo === 'CASA' ||
+                       h.materia?.tipoMateriaId === HABITO_ID; // ← Usar el ID directamente
         return esHabito;
       });
       
@@ -1039,7 +1062,7 @@ export function Dashboard() {
         
         // Buscar la calificación existente
         const gradeToUpdate = classGrades.find(
-          grade => grade.estudianteId === editingId && 
+          grade => grade.estudianteId === studentId && 
                   grade.materiaId === newGrade.materiaId
         );
 
@@ -2023,33 +2046,23 @@ export function Dashboard() {
                                     </TableCell>
                                     <TableCell>
                                       {isEditing ? (
-                                        <Input
-                                          type="number"
-                                          min="0"
-                                          max="100"
-                                          value={editValue}
-                                          onChange={(e) => setEditValue(e.target.value)}
-                                          className="w-20"
-                                        />
-                                      ) : (
-                                        <span className={cn(
-                                          'font-medium',
-                                          typeof grade === 'number' && grade < 60 ? 'text-red-500' : 'text-green-600'
-                                        )}>
-                                          {typeof grade === 'number' ? `${grade}%` : (grade || 'N/A')}
-                                        </span>
-                                      )}
-                                    </TableCell>
-                                    <TableCell>
-                                      {isEditing ? (
-                                        <div className="flex gap-2">
+                                        <div className="flex items-center gap-2">
+                                          <Input
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            value={editValue}
+                                            onChange={(e) => setEditValue(e.target.value)}
+                                            className="w-20"
+                                          />
                                           <Button
                                             variant="ghost"
                                             size="sm"
                                             onClick={(e) => {
                                               e.preventDefault();
-                                              handleSaveGrade(e);
+                                              handleSaveStudentGrade(estudiante.id);
                                             }}
+                                            className="h-8 w-8"
                                           >
                                             <Check className="h-4 w-4" />
                                           </Button>
@@ -2057,47 +2070,45 @@ export function Dashboard() {
                                             variant="ghost"
                                             size="sm"
                                             onClick={() => setEditingId(null)}
+                                            className="h-8 w-8"
                                           >
                                             <X className="h-4 w-4" />
                                           </Button>
                                         </div>
                                       ) : (
-                                        <div className="flex gap-2">
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => {
-                                              // Find the current grade to get the materiaId
-                                              const currentGrade = classGrades.find(g => g.estudianteId === estudiante.id);
-                                              handleEditGrade(
-                                                estudiante.id, 
-                                                typeof grade === 'number' ? grade : null,
-                                                currentGrade?.materiaId || ''
-                                              );
-                                            }}
-                                            title="Editar calificación"
-                                            className="h-8 w-8 p-0"
-                                          >
-                                            <Pencil className="h-4 w-4" />
-                                          </Button>
-                                          
-                                          <DownloadGradeReportButton 
-                                            estudiante={{
-                                              id: estudiante.id,
-                                              nombre: estudiante.nombre || '',
-                                              apellido: estudiante.apellido || '',
-                                              dni: estudiante.dni || '',
-                                              grado: estudiante.grados?.[0] || '',
-                                              seccion: estudiante.secciones?.[0] || '',
-                                              anio: new Date().getFullYear().toString(),
-                                            }}
-                                            periodo={{
-                                              id: currentPeriod?.id || '',
-                                              nombre: currentPeriod?.name || 'Período actual',
-                                              fechaInicio: currentPeriod?.startDate || new Date().toISOString(),
-                                              fechaFin: currentPeriod?.endDate || new Date().toISOString()
-                                            }}
-                                          />
+                                        <div className="flex items-center justify-between gap-4">
+                                          <span className="font-medium text-center min-w-[60px]">
+                                            {grade !== null ? grade : 'Sin calificación'}
+                                          </span>
+                                          <div className="flex gap-1">
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => setEditingId(estudiante.id)}
+                                              title="Editar calificación"
+                                              className="h-8 w-8 p-0"
+                                            >
+                                              <Pencil className="h-4 w-4" />
+                                            </Button>
+                                            
+                                            <DownloadGradeReportButton 
+                                              estudiante={{
+                                                id: estudiante.id,
+                                                nombre: estudiante.nombre || '',
+                                                apellido: estudiante.apellido || '',
+                                                dni: estudiante.dni || '',
+                                                grado: estudiante.grados?.[0] || '',
+                                                seccion: estudiante.secciones?.[0] || '',
+                                                anio: new Date().getFullYear().toString(),
+                                              }}
+                                              periodo={{
+                                                id: currentPeriod?.id || '',
+                                                nombre: currentPeriod?.name || 'Período actual',
+                                                fechaInicio: currentPeriod?.startDate || new Date().toISOString(),
+                                                fechaFin: currentPeriod?.endDate || new Date().toISOString()
+                                              }}
+                                            />
+                                          </div>
                                         </div>
                                       )}
                                     </TableCell>
@@ -2366,12 +2377,17 @@ export function Dashboard() {
                               min="1"
                               max="100"
                               value={newGrade.calificacion || ""}
-                              onChange={(e) => setNewGrade({
-                                ...newGrade,
-                                calificacion: e.target.value
-                                  ? parseInt(e.target.value)
-                                  : undefined,
-                              })}
+                              onChange={(e) => {
+                                console.log('🔍 Input calificación - valor original:', e.target.value);
+                                console.log('🔍 Input calificación - parseInt:', parseInt(e.target.value));
+                                console.log('🔍 Input calificación - isNaN:', isNaN(parseInt(e.target.value)));
+                                setNewGrade({
+                                  ...newGrade,
+                                  calificacion: e.target.value
+                                    ? parseInt(e.target.value)
+                                    : undefined,
+                                });
+                              }}
                               placeholder="1-100" />
                           </div>
                         ) : (
@@ -2690,7 +2706,13 @@ export function Dashboard() {
                         {hogarEvaluations.length === 0 && habitoEvaluations.length === 0 && (
                           <div className="text-center py-8 text-gray-500">
                             <Users className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                            <p>No hay evaluaciones de hábitos registradas para este estudiante</p>
+                            <p className="font-medium mb-2">No hay evaluaciones de hábitos registradas para este estudiante</p>
+                            <div className="text-sm text-gray-400 bg-gray-50 p-3 rounded-lg max-w-md mx-auto">
+                              <p className="mb-1">Se esperaban:</p>
+                              <p>• 7 evaluaciones de hábitos del hogar</p>
+                              <p>• 10 evaluaciones de comportamiento</p>
+                              <p className="mt-2 text-xs">Contacte al administrador para generar las evaluaciones faltantes.</p>
+                            </div>
                           </div>
                         )}
                       </div>
