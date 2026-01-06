@@ -251,9 +251,13 @@ export default function AdminGradesPage() {
       // selectedGrade siempre es un objeto con formato {grado, nivel, seccion}
       const { grado, nivel, seccion } = selectedGrade;
       
-      console.log('🔍 AdminGrades - Parseado - grado:', grado, 'nivel:', nivel, 'seccion:', seccion);
+      // Construir el grado completo como está en la base de datos
+      const gradoCompleto = `${grado}° ${nivel} ${seccion}`.trim();
       
-      const studentsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/students?grado=${grado}&nivel=${nivel}&seccion=${seccion}`, {
+      console.log('🔍 AdminGrades - Parseado - grado:', grado, 'nivel:', nivel, 'seccion:', seccion);
+      console.log('🔍 AdminGrades - Grado completo para búsqueda:', gradoCompleto);
+      
+      const studentsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/students?grado=${encodeURIComponent(gradoCompleto)}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -264,6 +268,7 @@ export default function AdminGradesPage() {
         const studentsData = await studentsResponse.json()
         const studentsArray = Array.isArray(studentsData) ? studentsData : (studentsData.data || [])
         console.log('🔍 AdminGrades - Estudiantes encontrados:', studentsArray.length);
+        console.log('🔍 AdminGrades - Estudiantes:', studentsArray.map((s: any) => ({ nombre: s.nombre, apellido: s.apellido, grados: s.grados })));
         setStudents(studentsArray)
       } else {
         throw new Error(`Error ${studentsResponse.status}: ${studentsResponse.statusText}`)
