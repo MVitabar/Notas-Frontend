@@ -1459,7 +1459,9 @@ export function Dashboard() {
       evaluacionHabitoId,
       valor,
       selectedStudentId: selectedStudent?.id,
-      currentPeriodId: currentPeriod?.id
+      currentPeriodId: currentPeriod?.id,
+      currentPeriod: currentPeriod,
+      unidadAsignada: currentPeriod?.unidadAsignada
     });
     
     try {
@@ -1484,18 +1486,28 @@ export function Dashboard() {
 
       try {
         // Preparar los datos para enviar al backend
+        // Determinar la unidad según el período actual
+        let unidad = 'u1'; // valor por defecto
+        if (currentPeriod && 'unidadAsignada' in currentPeriod && currentPeriod.unidadAsignada) {
+          unidad = currentPeriod.unidadAsignada;
+          console.log('🔍 Usando unidad del período actual:', unidad);
+        } else {
+          console.log('🔍 Período sin unidadAsignada, usando valor por defecto u1');
+        }
+        
         const habitGradeData: SaveHabitGradesRequest = {
           periodoId: currentPeriod.id,
           calificaciones: [
             {
               evaluacionHabitoId: evaluacionHabitoId,
-              u1: valor,
+              [unidad]: valor, // Usar la unidad dinámica
               comentario: "Evaluación de hábito"
             }
           ]
         };
 
         console.log('Enviando datos al backend:', habitGradeData);
+        console.log('🔍 Unidad que se usará para guardar:', unidad);
         await gradeService.saveHabitGrades(selectedStudent.id, habitGradeData);
 
         console.log('Datos guardados exitosamente, recargando...');
