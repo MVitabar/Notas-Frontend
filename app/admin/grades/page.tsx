@@ -116,7 +116,7 @@ export default function AdminGradesPage() {
   
   // Estados principales
   const [isLoading, setIsLoading] = useState(false)
-  const [selectedGrade, setSelectedGrade] = useState<string>("")
+  const [selectedGrade, setSelectedGrade] = useState<GradoInfo | null>(null)
   const [students, setStudents] = useState<Estudiante[]>([])
   const [classInfo, setClassInfo] = useState<{
     grado: string;
@@ -242,7 +242,16 @@ export default function AdminGradesPage() {
       setIsLoadingStudents(true)
       setErrorLoadingStudents(null)
       
-      const [grado, nivel, seccion] = selectedGrade.split('|')
+      console.log('🔍 AdminGrades - selectedGrade:', selectedGrade);
+      
+      if (!selectedGrade) {
+        throw new Error('No se ha seleccionado un grado');
+      }
+      
+      // selectedGrade siempre es un objeto con formato {grado, nivel, seccion}
+      const { grado, nivel, seccion } = selectedGrade;
+      
+      console.log('🔍 AdminGrades - Parseado - grado:', grado, 'nivel:', nivel, 'seccion:', seccion);
       
       const studentsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/students?grado=${grado}&nivel=${nivel}&seccion=${seccion}`, {
         headers: {
@@ -254,6 +263,7 @@ export default function AdminGradesPage() {
       if (studentsResponse.ok) {
         const studentsData = await studentsResponse.json()
         const studentsArray = Array.isArray(studentsData) ? studentsData : (studentsData.data || [])
+        console.log('🔍 AdminGrades - Estudiantes encontrados:', studentsArray.length);
         setStudents(studentsArray)
       } else {
         throw new Error(`Error ${studentsResponse.status}: ${studentsResponse.statusText}`)
@@ -329,7 +339,11 @@ export default function AdminGradesPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div>
                 <h3 className="font-medium mb-2">Seleccionar Grado</h3>
-                <Select onValueChange={setSelectedGrade} value={selectedGrade || ""}>
+                <Select onValueChange={(value) => {
+                  // Convertir el string value al objeto completo
+                  const [grado, nivel, seccion] = value.split('|');
+                  setSelectedGrade({ grado, nivel, seccion });
+                }} value={selectedGrade ? `${selectedGrade.grado}|${selectedGrade.nivel}|${selectedGrade.seccion || ''}` : ""}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecciona un grado" />
                   </SelectTrigger>
