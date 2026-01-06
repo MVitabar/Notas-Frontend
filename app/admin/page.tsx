@@ -272,10 +272,11 @@ export default function AdminDashboard() {
                 </div>
               </div>
             )}
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="overview">Resumen</TabsTrigger>
               <TabsTrigger value="teachers">Docentes</TabsTrigger>
               <TabsTrigger value="students">Estudiantes</TabsTrigger>
+              <TabsTrigger value="grades">Calificaciones</TabsTrigger>
               <TabsTrigger value="reports">Reportes</TabsTrigger>
             </TabsList>
 
@@ -370,6 +371,21 @@ export default function AdminDashboard() {
                   </CardHeader>
                   <CardContent className="text-center">
                     <Button size="lg">Ver Gestión de Clases</Button>
+                  </CardContent>
+                </Card>
+              </Link>
+            </TabsContent>
+
+            <TabsContent value="grades">
+              <Link href="/admin/grades">
+                <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                  <CardHeader className="text-center">
+                    <FileText className="h-12 w-12 text-orange-600 mx-auto mb-4" />
+                    <CardTitle>Gestión de Calificaciones</CardTitle>
+                    <CardDescription>Administrar calificaciones académicas, hábitos y evaluaciones</CardDescription>
+                  </CardHeader>
+                  <CardContent className="text-center">
+                    <Button size="lg">Gestionar Calificaciones</Button>
                   </CardContent>
                 </Card>
               </Link>

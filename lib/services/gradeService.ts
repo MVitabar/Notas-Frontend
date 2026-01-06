@@ -101,6 +101,7 @@ export interface CreateCalificacionRequest {
   valorExtraescolar?: ValorExtraescolar;
   comentario?: string;
   fecha?: string;
+  unidad?: string; // Unidad asignada (u1, u2, u3, u4)
   esExtraescolar?: boolean;
   nombreMateria?: string;
   // For backward compatibility
@@ -116,6 +117,7 @@ export interface UpdateCalificacionRequest {
   comentario?: string;
   materiaId?: string;
   periodoId?: string;
+  unidad?: string; // Unidad asignada (u1, u2, u3, u4)
   esExtraescolar?: boolean;
   nombreMateria?: string;
 }
@@ -329,7 +331,8 @@ const gradeService: IGradeService = {
         periodoId: calificacion.periodoId.trim(),
         tipoCalificacion: calificacion.tipoCalificacion,
         tipoEvaluacion: calificacion.tipoEvaluacion.trim(),
-        comentario: calificacion.comentario || undefined
+        comentario: calificacion.comentario || undefined,
+        unidad: calificacion.unidad || undefined // Agregar el campo unidad
       };
 
       // No incluir la fecha ya que el servidor la genera automáticamente
@@ -350,6 +353,7 @@ const gradeService: IGradeService = {
       console.log('URL:', `${process.env.NEXT_PUBLIC_API_URL}/calificaciones`);
       console.log('Método: POST');
       console.log('Datos:', JSON.stringify(requestData, null, 2));
+      console.log('🔍 Campo unidad en requestData:', requestData.unidad);
 
       // Verificar el token de autenticación
       console.log('Token en localStorage:', authToken ? 'Encontrado' : 'No encontrado');
@@ -449,6 +453,7 @@ const gradeService: IGradeService = {
         calificacion: calificacion.calificacion,
         comentario: calificacion.comentario || '',
         tipoCalificacion: calificacion.tipoCalificacion,
+        unidad: calificacion.unidad || undefined, // Agregar el campo unidad
         ...(calificacion.valorConceptual && { valorConceptual: calificacion.valorConceptual }),
         ...(calificacion.nombreMateria && { nombreMateria: calificacion.nombreMateria })
         // 🔥 REMOVIDO: esExtraescolar - el backend no lo acepta para actualizaciones
@@ -456,6 +461,7 @@ const gradeService: IGradeService = {
 
       console.log('Enviando petición PUT a:', `/calificaciones/${id}`);
       console.log('Cuerpo de la petición:', JSON.stringify(requestBody, null, 2));
+      console.log('🔍 Campo unidad en requestBody:', requestBody.unidad);
 
       try {
         // Hacer la petición PUT al endpoint correcto

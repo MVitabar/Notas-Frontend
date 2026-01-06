@@ -150,8 +150,9 @@ type DashboardAcademicPeriod = {
   startDate: string;
   endDate: string;
   isCurrent: boolean;
-  status: "active" | "inactive" | "completed" | "upcoming";
+  status: "active" | "completed" | "cancelled" | "upcoming";
   description?: string;
+  unidadAsignada?: string; // Unidad asignada al período (u1, u2, u3, u4)
   estado?: string; // For compatibility with existing code
 };
 
@@ -184,11 +185,11 @@ interface Grade extends Omit<CalificacionPorEstudiante, "periodo" | "materia" | 
 }
 
 export function Dashboard() {
-  // Estado para la pestaña activa
-  const [activeMainTab, setActiveMainTab] = useState<"grados" | "calificaciones">("grados");
+  // Estado para la pestaña activa (solo grados ahora)
+  const [activeMainTab, setActiveMainTab] = useState<"grados">("grados");
   const [selectedBimester, setSelectedBimester] = useState("1");
 
-  // Estado para las calificaciones
+  // Estado para los grados
   const [selectedGrade, setSelectedGrade] = useState<string>("");
   const [students, setStudents] = useState<Estudiante[]>([]);
   const [classInfo, setClassInfo] = useState<{
@@ -206,7 +207,6 @@ export function Dashboard() {
   useEffect(() => {
     const loadStudents = async () => {
       if (!selectedGrade) {
-        setStudents([]);
         setClassInfo(null);
         return;
       }
@@ -225,9 +225,13 @@ export function Dashboard() {
         });
 
         // Llamar al servicio para obtener estudiantes reales
+        console.log('🔍 Dashboard - Loading students for:', { grado, nivel, seccion, selectedGrade });
+        
+        // Enviar el nombre completo del grado en lugar de formatearlo
+        const gradoCompleto = nivel || grado;
         const estudiantes = await dashboardService.getEstudiantesPorGrado({
-          grado: parseInt(grado),
-          nivel: nivel || undefined,
+          grado: parseInt(grado), // Mantener el número para compatibilidad
+          nivel: gradoCompleto,
           seccion: seccion || undefined,
         });
 
@@ -346,8 +350,22 @@ export function Dashboard() {
   } = useQuery<DashboardAcademicPeriod | null>({
     queryKey: ["currentAcademicPeriod"],
     queryFn: async () => {
-      const period = await dashboardService.getCurrentAcademicPeriod();
-      if (!period) return null;
+      // SOLO usar el período con isCurrent: true
+      console.log('🔍 [Dashboard] Buscando período con isCurrent: true...');
+      const period = await dashboardService.getActiveAcademicPeriod();
+      
+      if (!period) {
+        console.error('❌ [Dashboard] No se encontró ningún período con isCurrent: true');
+        return null;
+      }
+      
+      console.log('✅ [Dashboard] Período encontrado:', {
+        id: period.id,
+        name: period.name,
+        isCurrent: period.isCurrent,
+        unidadAsignada: (period as any).unidadAsignada
+      });
+      
       return period;
     },
     staleTime: 5 * 60 * 1000, // 5 minutos
@@ -382,6 +400,12 @@ export function Dashboard() {
     valorConceptual: undefined,
     comentario: "",
   });
+
+  // Estados para hábitos
+  const [hogarEvaluations, setHogarEvaluations] = useState<any[]>([]);
+  const [habitoEvaluations, setHabitoEvaluations] = useState<any[]>([]);
+  const [loadingHabitGrades, setLoadingHabitGrades] = useState(false);
+  const [loadingMaterias, setLoadingMaterias] = useState(false);
   const { user } = useAuth();
 
   const toggleGrado = (gradoId: string) => {
@@ -538,14 +562,58 @@ export function Dashboard() {
       // El PDF muestra todos los hábitos con calificaciones sin filtrar por grado
       // El dashboard debe hacer lo mismo para mantener consistencia
       console.log(`🔍 Dashboard - Hábitos totales (sin filtrar por grado): ${habitosCombinados.length}`);
+      console.log('🔍 Dashboard - Tipos de hábitos encontrados:', [...new Set(habitosCombinados.map((h: any) => h.tipo))]);
+      console.log('🔍 Dashboard - Nombres de hábitos:', habitosCombinados.map((h: any) => h.nombre));
       
       setHabitGrades(habitosCombinados);
       setLoadingHabitGrades(false);
 
       // Map the grades to the expected format
       const mappedGrades = grades.map((g: any) => {
+        // Debug: mostrar el período actual
+        console.log('🔍 currentPeriod:', currentPeriod);
+        
+        // Determinar la unidad basada en el tipoEvaluacion y la unidad del período actual
+        let unidad = '';
+        if (currentPeriod && 'unidadAsignada' in currentPeriod && currentPeriod.unidadAsignada) {
+          // Si el tipoEvaluacion coincide con un ID de período, usar la unidad del período actual
+          if (g.tipoEvaluacion === currentPeriod.id) {
+            unidad = currentPeriod.unidadAsignada;
+          } else {
+            // Mapeo de tipos de evaluación a unidades (fallback)
+            const evaluationToUnitMap: Record<string, string> = {
+              'PARCIAL_1': 'u1',
+              'PARCIAL_2': 'u2', 
+              'PARCIAL_3': 'u3',
+              'PARCIAL_4': 'u4',
+              'EXAMEN_FINAL': 'u4',
+              'TRABAJO_FINAL': 'u4'
+            };
+            unidad = evaluationToUnitMap[g.tipoEvaluacion] || currentPeriod.unidadAsignada;
+          }
+        } else {
+          // Fallback si no hay unidad asignada en el período
+          const evaluationToUnitMap: Record<string, string> = {
+            'PARCIAL_1': 'u1',
+            'PARCIAL_2': 'u2', 
+            'PARCIAL_3': 'u3',
+            'PARCIAL_4': 'u4',
+            'EXAMEN_FINAL': 'u4',
+            'TRABAJO_FINAL': 'u4'
+          };
+          unidad = evaluationToUnitMap[g.tipoEvaluacion] || '';
+        }
+
+        console.log('🔍 Asignando unidad:', unidad, 'para tipoEvaluacion:', g.tipoEvaluacion);
+
+        // Si el backend no devuelve unidad, usar la determinada por el frontend
+        const unidadFinal = g.unidad || unidad;
+        
+        console.log('🔍 Mapping grade - backend unidad:', g.unidad, 'frontend unidad:', unidad, 'final:', unidadFinal);
+        
         const mappedGrade = {
           ...g,
+          unidad: unidadFinal, // Usar la unidad correcta aunque el backend no la guarde
           materia: {
             id: g.materia?.id || g.materiaId,
             nombre: g.materia?.nombre || 'Sin materia',
@@ -593,14 +661,20 @@ export function Dashboard() {
       const hogarEvals = habitosCombinados.filter((h: any) => {
         return h.tipoMateriaId === HOGAR_ID || 
                h.tipo === 'HOGAR' ||
-               h.tipoMateriaNombre === 'HOGAR';
+               h.tipoMateriaNombre === 'HOGAR' ||
+               h.tipo === 'CASA'; // ← Agregar 'CASA' que es lo que viene del backend
       });
       
       const habitoEvals = habitosCombinados.filter((h: any) => {
         return h.tipoMateriaId === HABITO_ID || 
                h.tipo === 'HABITO' ||
-               h.tipoMateriaNombre === 'HABITO';
+               h.tipoMateriaNombre === 'HABITO' ||
+               h.tipo === 'APRENDIZAJE' || // ← Agregar 'APRENDIZAJE' que es lo que viene del backend
+               h.tipo === 'COMPORTAMIENTO'; // ← Agregar 'COMPORTAMIENTO' que es lo que viene del backend
       });
+      
+      console.log('🔍 Dashboard - Hábitos CASA (hogarEvals):', hogarEvals.length, hogarEvals.map((h: any) => h.nombre));
+      console.log('🔍 Dashboard - Hábitos APRENDIZAJE/COMPORTAMIENTO (habitoEvals):', habitoEvals.length, habitoEvals.map((h: any) => h.nombre));
       
       // Cargar evaluaciones de hábitos regulares existentes
       const habitEvaluationsGradesData: Record<string, { id: string; valor: ValorConceptual; evaluacionHabitoId: string }> = {};
@@ -809,6 +883,8 @@ export function Dashboard() {
 
   // Mostrar todos los grados disponibles - use useMemo instead of useEffect
   const filteredGrados = useMemo(() => {
+    console.log('🔍 Dashboard - filteredGrados - grados:', grados?.length || 0, 'teacherProfile:', teacherProfile?.materias?.length || 0);
+    
     // Si no hay grados pero hay materias, mostrar un grado por defecto
     const hasMaterias = teacherProfile?.materias && teacherProfile.materias.length > 0;
 
@@ -834,40 +910,44 @@ export function Dashboard() {
         totalEstudiantes: 0,
         estudiantes: [],
       };
+      console.log('🔍 Dashboard - created default grado with materias:', defaultGrado.materias.length);
       return [defaultGrado];
     } else {
+      console.log('🔍 Dashboard - returning grados:', grados.length);
       return grados as unknown as GradoConMaterias[];
     }
   }, [grados, teacherProfile]);
 
   // Filter students based on search term - use useMemo instead of useEffect
   const filteredStudents = useMemo(() => {
+    console.log('🔍 Dashboard - filteredStudents - students:', students?.length || 0, 'searchTerm:', searchTerm);
+    
     if (!students) {
       return [];
     }
 
     if (!searchTerm) {
+      console.log('🔍 Dashboard - returning all students:', students.length);
       return students;
     }
 
     const term = searchTerm.toLowerCase();
-    return students.filter(
+    const filtered = students.filter(
       (student) =>
         student.nombre?.toLowerCase().includes(term) ||
         student.apellido?.toLowerCase().includes(term) ||
         student.dni?.includes(term)
     );
+    
+    console.log('🔍 Dashboard - filtered result:', filtered.length);
+    return filtered;
   }, [students, searchTerm]);
 
   const [classGrades, setClassGrades] = useState<CalificacionResponse[]>([]);
   const [materias, setMaterias] = useState<MateriaAsignada[]>([]);
-  const [loadingMaterias, setLoadingMaterias] = useState(true);
   const [habitGrades, setHabitGrades] = useState<any[]>([]);
-  const [loadingHabitGrades, setLoadingHabitGrades] = useState(false);
   
   // Estados para separar las evaluaciones por tipo
-  const [hogarEvaluations, setHogarEvaluations] = useState<any[]>([]);
-  const [habitoEvaluations, setHabitoEvaluations] = useState<any[]>([]);
 
   // Fetch materias from database with debouncing to reduce API calls
   useEffect(() => {
@@ -1024,6 +1104,53 @@ export function Dashboard() {
     fetchClassGrades();
   }, [selectedGrade, selectedBimester, currentPeriod?.id]);
 
+  // Auto-select current bimestre based on current academic period
+  useEffect(() => {
+    console.log('🔍 useEffect - bimestres:', bimestres.length, 'currentPeriod:', currentPeriod);
+    
+    if (bimestres.length > 0 && currentPeriod) {
+      // Si el período actual tiene unidadAsignada, usarla para determinar el bimestre
+      if (currentPeriod.unidadAsignada) {
+        const unidadToBimestreMap: Record<string, number> = {
+          'u1': 1,
+          'u2': 2,
+          'u3': 3,
+          'u4': 4
+        };
+        
+        const bimestreActual = unidadToBimestreMap[currentPeriod.unidadAsignada] || 1;
+        
+        console.log('🔍 Auto-selecting bimestre based on current period:', {
+          currentPeriodName: currentPeriod.name,
+          currentPeriodUnidad: currentPeriod.unidadAsignada,
+          bimestreActual
+        });
+        
+        setSelectedBimester(bimestreActual.toString());
+      } else {
+        // Fallback: calcular por fecha si no hay unidad asignada
+        const hoy = new Date();
+        const fechaInicio = new Date(currentPeriod.startDate);
+        const fechaFin = new Date(currentPeriod.endDate);
+        
+        const duracionTotal = fechaFin.getTime() - fechaInicio.getTime();
+        const duracionBimestre = duracionTotal / 4;
+        
+        const tiempoTranscurrido = hoy.getTime() - fechaInicio.getTime();
+        const bimestreActual = Math.min(4, Math.max(1, Math.ceil(tiempoTranscurrido / duracionBimestre)));
+        
+        console.log('🔍 Auto-selecting bimestre by date (fallback):', {
+          currentDate: hoy.toISOString(),
+          periodStart: fechaInicio.toISOString(),
+          periodEnd: fechaFin.toISOString(),
+          bimestreActual
+        });
+        
+        setSelectedBimester(bimestreActual.toString());
+      }
+    }
+  }, [bimestres, currentPeriod]);
+
   const getPromedioBimestre = (materia: Materia, bimestre: number): string => {
     switch (bimestre) {
       case 1:
@@ -1134,6 +1261,38 @@ export function Dashboard() {
         if (gradeToUpdate) {
           console.log('=== PREPARANDO ACTUALIZACIÓN ===');
           console.log('ID de la calificación a actualizar:', gradeToUpdate.id);
+          
+          // Determinar la unidad basada en el tipoEvaluacion y la unidad del período actual
+          let unidad = '';
+          if (currentPeriod && 'unidadAsignada' in currentPeriod && currentPeriod.unidadAsignada) {
+            // Si el tipoEvaluacion coincide con un ID de período, usar la unidad del período actual
+            if (newGrade.tipoEvaluacion === currentPeriod.id) {
+              unidad = currentPeriod.unidadAsignada;
+            } else {
+              // Mapeo de tipos de evaluación a unidades (fallback)
+              const evaluationToUnitMap: Record<string, string> = {
+                'PARCIAL_1': 'u1',
+                'PARCIAL_2': 'u2', 
+                'PARCIAL_3': 'u3',
+                'PARCIAL_4': 'u4',
+                'EXAMEN_FINAL': 'u4',
+                'TRABAJO_FINAL': 'u4'
+              };
+              unidad = evaluationToUnitMap[newGrade.tipoEvaluacion] || currentPeriod.unidadAsignada;
+            }
+          } else {
+            // Fallback si no hay unidad asignada en el período
+            const evaluationToUnitMap: Record<string, string> = {
+              'PARCIAL_1': 'u1',
+              'PARCIAL_2': 'u2', 
+              'PARCIAL_3': 'u3',
+              'PARCIAL_4': 'u4',
+              'EXAMEN_FINAL': 'u4',
+              'TRABAJO_FINAL': 'u4'
+            };
+            unidad = evaluationToUnitMap[newGrade.tipoEvaluacion] || '';
+          }
+          
           console.log('Nuevos valores a guardar:', {
             tipoCalificacion: newGrade.tipoCalificacion,
             tipoEvaluacion: newGrade.tipoEvaluacion,
@@ -1141,7 +1300,8 @@ export function Dashboard() {
             valorConceptual: newGrade.valorConceptual,
             comentario: newGrade.comentario,
             materiaId: newGrade.materiaId,
-            periodoId: currentPeriod.id
+            periodoId: currentPeriod.id,
+            unidad: unidad
           });
 
           try {
@@ -1159,9 +1319,11 @@ export function Dashboard() {
               comentario: newGrade.comentario,
               materiaId: newGrade.materiaId,
               periodoId: currentPeriod.id,
+              unidad: unidad, // Agregar la unidad determinada
               esExtraescolar: esExtraescolar // Usar el campo esExtraescolar
             };
             console.log('Datos para actualizar:', updateData);
+            console.log('🔍 Enviando campo unidad:', updateData.unidad);
             updatedGrade = await gradeService.update(gradeToUpdate.id, updateData);
             
             console.log('=== RESPUESTA DEL SERVIDOR ===');
@@ -1205,10 +1367,42 @@ export function Dashboard() {
         // Determinar si es una materia extracurricular
         const esExtraescolar = isExtraescolar(newGrade.materiaId);
         
+        // Determinar la unidad basada en el tipoEvaluacion y la unidad del período actual
+        let unidad = '';
+        if (currentPeriod && 'unidadAsignada' in currentPeriod && currentPeriod.unidadAsignada) {
+          // Si el tipoEvaluacion coincide con un ID de período, usar la unidad del período actual
+          if (newGrade.tipoEvaluacion === currentPeriod.id) {
+            unidad = currentPeriod.unidadAsignada;
+          } else {
+            // Mapeo de tipos de evaluación a unidades (fallback)
+            const evaluationToUnitMap: Record<string, string> = {
+              'PARCIAL_1': 'u1',
+              'PARCIAL_2': 'u2', 
+              'PARCIAL_3': 'u3',
+              'PARCIAL_4': 'u4',
+              'EXAMEN_FINAL': 'u4',
+              'TRABAJO_FINAL': 'u4'
+            };
+            unidad = evaluationToUnitMap[newGrade.tipoEvaluacion] || currentPeriod.unidadAsignada;
+          }
+        } else {
+          // Fallback si no hay unidad asignada en el período
+          const evaluationToUnitMap: Record<string, string> = {
+            'PARCIAL_1': 'u1',
+            'PARCIAL_2': 'u2', 
+            'PARCIAL_3': 'u3',
+            'PARCIAL_4': 'u4',
+            'EXAMEN_FINAL': 'u4',
+            'TRABAJO_FINAL': 'u4'
+          };
+          unidad = evaluationToUnitMap[newGrade.tipoEvaluacion] || '';
+        }
+        
         console.log('Creando nueva calificación:', {
           materia: newGrade.nombreMateria,
           esExtraescolar,
-          materiaId: newGrade.materiaId
+          materiaId: newGrade.materiaId,
+          unidad: unidad
         });
 
         const gradeData: CreateCalificacionRequest = {
@@ -1220,14 +1414,18 @@ export function Dashboard() {
           calificacion: newGrade.calificacion,
           valorConceptual: newGrade.valorConceptual as ValorConceptual,
           comentario: newGrade.comentario,
+          unidad: unidad, // Agregar la unidad determinada
           esExtraescolar: esExtraescolar,
           nombreMateria: newGrade.nombreMateria
         };
 
+        console.log('🔍 Creando nueva calificación con unidad:', unidad);
+        console.log('Datos completos para crear:', gradeData);
+
         const newGradeResponse = await gradeService.create(gradeData);
         
-        // Agregar la nueva calificación al estado local
-        setClassGrades(prevGrades => [...prevGrades, newGradeResponse]);
+        // No agregar localmente, loadStudentGrades ya recargará los datos del servidor
+        // setClassGrades(prevGrades => [...prevGrades, newGradeResponse]);
         
         toast.success("Calificación guardada correctamente");
       }
@@ -1775,10 +1973,9 @@ export function Dashboard() {
                 })()}
               </div>
             )}
-            <Tabs value={activeMainTab} onValueChange={(value) => setActiveMainTab(value as "grados" | "calificaciones")} className="space-y-6">
-              <TabsList className="grid w-full grid-cols-2">
+            <Tabs value={activeMainTab} onValueChange={(value) => setActiveMainTab(value as "grados")} className="space-y-6">
+              <TabsList className="grid w-full grid-cols-1">
                 <TabsTrigger value="grados">Grados</TabsTrigger>
-                <TabsTrigger value="calificaciones">Calificaciones</TabsTrigger>
               </TabsList>
 
               <TabsContent value="grados">
@@ -1971,232 +2168,7 @@ export function Dashboard() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="calificaciones" className="space-y-6">
-                <div className="bg-white p-6 rounded-lg shadow-sm border">
-                  <h2 className="text-2xl font-semibold mb-6">Gestión de Calificaciones</h2>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                    <div>
-                      <h3 className="font-medium mb-2">Seleccionar Grado</h3>
-                      <Select onValueChange={setSelectedGrade} value={selectedGrade || ""}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona un grado" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {filteredGrados.map((grado) => (
-                            <SelectItem
-                              key={`select-${grado.grado}-${grado.nivel}-${grado.seccion}`}
-                              value={`${grado.grado}|${grado.nivel}|${grado.seccion || ''}`}
-                            >
-                              {isNaN(Number(grado.grado))
-                                ? `${grado.grado} ${grado.seccion ? `- ${grado.seccion}` : ''}`
-                                : `${grado.grado}° ${grado.nivel} ${grado.seccion ? `- ${grado.seccion}` : ''}`
-                              }
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div>
-                      <h3 className="font-medium mb-2">Bimestre</h3>
-                      <Select value={selectedBimester} onValueChange={setSelectedBimester}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona un bimestre" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {bimestres.length > 0 ? (
-                            bimestres.map((bimestre) => (
-                              <SelectItem key={bimestre.id} value={bimestre.numero.toString()}>
-                                {bimestre.nombre}
-                              </SelectItem>
-                            ))
-                          ) : (
-                            <div className="p-2 text-sm text-gray-500 text-center">
-                              No hay bimestres disponibles
-                            </div>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  {isLoadingStudents ? (
-                    <div className="flex justify-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    </div>
-                  ) : errorLoadingStudents ? (
-                    <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
-                      <div className="flex">
-                        <div className="flex-shrink-0">
-                          <AlertCircle className="h-5 w-5 text-red-400" />
-                        </div>
-                        <div className="ml-3">
-                          <p className="text-sm text-red-700">
-                            {errorLoadingStudents}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : selectedGrade ? (
-                    <div className="mt-6">
-                      <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-medium">Lista de Estudiantes</h3>
-                        <div className="relative w-64">
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                          <Input
-                            placeholder="Buscar estudiante..."
-                            className="pl-10"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="border rounded-lg overflow-hidden">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Estudiante</TableHead>
-                              <TableHead>DNI</TableHead>
-                              <TableHead>Email</TableHead>
-                              <TableHead>Grado/Sección</TableHead>
-                              <TableHead>Estado</TableHead>
-                              <TableHead>Calificación</TableHead>
-                              <TableHead>Acciones</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-
-                            {filteredStudents.length > 0 ? (
-                              filteredStudents.map((estudiante) => {
-                                const grade = getCurrentGrade(estudiante);
-                                const isEditing = editingId === estudiante.id;
-                                const gradoInfo = estudiante.grados?.[0] || 'N/A';
-
-                                return (
-                                  <TableRow key={estudiante.id}>
-                                    <TableCell className="font-medium">
-                                      <div className="flex flex-col">
-                                        <span>{`${estudiante.nombre} ${estudiante.apellido}`}</span>
-                                        {estudiante.telefono && (
-                                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                            <Phone className="h-3 w-3" /> {estudiante.telefono}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      {estudiante.dni || 'N/A'}
-                                    </TableCell>
-                                    <TableCell>
-                                      {estudiante.email || 'N/A'}
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="flex flex-col">
-                                        <span>{gradoInfo}</span>
-                                        {estudiante.secciones?.length > 0 && (
-                                          <span className="text-xs text-muted-foreground">
-                                            Secciones: {estudiante.secciones.join(', ')}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      <Badge variant={estudiante.activo ? 'default' : 'destructive'}>
-                                        {estudiante.activo ? 'Activo' : 'Inactivo'}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                      {isEditing ? (
-                                        <div className="flex items-center gap-2">
-                                          <Input
-                                            type="number"
-                                            min="0"
-                                            max="100"
-                                            value={editValue}
-                                            onChange={(e) => setEditValue(e.target.value)}
-                                            className="w-20"
-                                          />
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={(e) => {
-                                              e.preventDefault();
-                                              handleSaveStudentGrade(estudiante.id);
-                                            }}
-                                            className="h-8 w-8"
-                                          >
-                                            <Check className="h-4 w-4" />
-                                          </Button>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => setEditingId(null)}
-                                            className="h-8 w-8"
-                                          >
-                                            <X className="h-4 w-4" />
-                                          </Button>
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-center justify-between gap-4">
-                                          <span className="font-medium text-center min-w-[60px]">
-                                            {grade !== null ? grade : 'Sin calificación'}
-                                          </span>
-                                          <div className="flex gap-1">
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              onClick={() => setEditingId(estudiante.id)}
-                                              title="Editar calificación"
-                                              className="h-8 w-8 p-0"
-                                            >
-                                              <Pencil className="h-4 w-4" />
-                                            </Button>
-                                            
-                                            <DownloadGradeReportButton 
-                                              estudiante={{
-                                                id: estudiante.id,
-                                                nombre: estudiante.nombre || '',
-                                                apellido: estudiante.apellido || '',
-                                                dni: estudiante.dni || '',
-                                                grado: estudiante.grados?.[0] || '',
-                                                seccion: estudiante.secciones?.[0] || '',
-                                                anio: new Date().getFullYear().toString(),
-                                              }}
-                                              periodo={{
-                                                id: currentPeriod?.id || '',
-                                                nombre: currentPeriod?.name || 'Período actual',
-                                                fechaInicio: currentPeriod?.startDate || new Date().toISOString(),
-                                                fechaFin: currentPeriod?.endDate || new Date().toISOString()
-                                              }}
-                                            />
-                                          </div>
-                                        </div>
-                                      )}
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })
-                            ) : (
-                              <TableRow>
-                                <TableCell colSpan={7} className="text-center py-8 text-gray-500">
-                                  No hay estudiantes en este grado
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-blue-50 p-4 rounded-lg text-center">
-                      <p className="text-blue-700">Selecciona un grado para ver los estudiantes</p>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-            </Tabs>
+              </Tabs>
           </div>
         </div>
       </div>
@@ -2364,17 +2336,66 @@ export function Dashboard() {
                               <SelectValue placeholder="Seleccionar materia" />
                             </SelectTrigger>
                             <SelectContent>
-                              {teacherProfile?.materias?.map((materia) => {
-                                const materiaName = materia.materia?.nombre || "Sin nombre";
-                                return (
-                                  <SelectItem
-                                    key={materia.id}
-                                    value={materia.id}
-                                  >
-                                    {materiaName}
-                                  </SelectItem>
-                                );
-                              })}
+                              {/* Deduplicar materias por materiaId para el dropdown */}
+                              {(() => {
+                                console.log('🔍 [Dropdown] Materias del teacherProfile:', teacherProfile?.materias);
+                                
+                                if (!teacherProfile?.materias) {
+                                  console.log('❌ [Dropdown] No hay materias en teacherProfile');
+                                  return null;
+                                }
+                                
+                                const materiasUnicas = new Map();
+                                
+                                teacherProfile.materias.forEach((materia, index) => {
+                                  console.log(`🔍 [Dropdown] Procesando materia ${index}:`, materia);
+                                  
+                                  // Obtener materiaId del objeto original con type assertion
+                                  const materiaWithId = materia as any;
+                                  const materiaIdOriginal = materiaWithId.materiaId;
+                                  const materiaData = materia.materia || materia;
+                                  console.log(`🔍 [Dropdown] materiaIdOriginal ${index}:`, materiaIdOriginal);
+                                  console.log(`🔍 [Dropdown] materiaData ${index}:`, materiaData);
+                                  
+                                  if (materiaIdOriginal) {
+                                    console.log(`🔍 [Dropdown] materiaId encontrado ${index}:`, materiaIdOriginal);
+                                    
+                                    if (!materiasUnicas.has(materiaIdOriginal)) {
+                                      console.log(`🔍 [Dropdown] Agregando materia única ${materiaIdOriginal}:`, materiaData);
+                                      // Guardar la materia completa con su id real
+                                      materiasUnicas.set(materiaIdOriginal, {
+                                        ...materiaData,
+                                        materiaId: materiaIdOriginal
+                                      });
+                                    } else {
+                                      console.log(`⚠️ [Dropdown] Materia duplicada ignorada ${materiaIdOriginal}`);
+                                    }
+                                  } else {
+                                    console.log(`❌ [Dropdown] No tiene materiaId ${index}:`, materiaWithId);
+                                  }
+                                });
+                                
+                                console.log('🔍 [Dropdown] Materias únicas procesadas:', Array.from(materiasUnicas.values()));
+                                
+                                const result = Array.from(materiasUnicas.values()).map((materiaData) => {
+                                  const materiaName = materiaData.nombre || materiaData.materia?.nombre || "Sin nombre";
+                                  // Usar el ID de la asignación (userMateriaId) para el value
+                                  const userMateriaId = materiaData.id || materiaData.materia?.id;
+                                  console.log(`🔍 [Dropdown] Creando SelectItem - Nombre: ${materiaName}, userMateriaId: ${userMateriaId}`);
+                                  
+                                  return (
+                                    <SelectItem
+                                      key={userMateriaId}
+                                      value={userMateriaId}
+                                    >
+                                      {materiaName}
+                                    </SelectItem>
+                                  );
+                                });
+                                
+                                console.log('🔍 [Dropdown] SelectItems creados:', result.length);
+                                return result;
+                              })()}
                             </SelectContent>
                           </Select>
                         </div>

@@ -539,7 +539,8 @@ export default function AcademicPeriodsPage() {
                 <SelectContent>
                   <SelectItem value="upcoming">Próximo</SelectItem>
                   <SelectItem value="active">Activo</SelectItem>
-                  <SelectItem value="inactive">Inactivo</SelectItem>
+                  <SelectItem value="completed">Completado</SelectItem>
+                  <SelectItem value="cancelled">Cancelado</SelectItem>
                 </SelectContent>
               </Select>
             </div>

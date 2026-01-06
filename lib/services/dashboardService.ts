@@ -295,6 +295,35 @@ export const dashboardService = {
     }
   },
 
+  // Nueva función para obtener el período con isCurrent: true (fallback si current falla)
+  async getActiveAcademicPeriod() {
+    try {
+      console.log('🔍 [dashboardService] Buscando período con isCurrent: true...');
+      const response = await api.get('/academic-periods');
+      
+      if (response.data && Array.isArray(response.data)) {
+        const activePeriod = response.data.find((period: any) => period.isCurrent === true);
+        
+        if (activePeriod) {
+          console.log('✅ [dashboardService] Período activo encontrado:', {
+            id: activePeriod.id,
+            name: activePeriod.name,
+            isCurrent: activePeriod.isCurrent,
+            unidadAsignada: activePeriod.unidadAsignada
+          });
+          return activePeriod;
+        } else {
+          console.warn('⚠️ [dashboardService] No se encontró ningún período con isCurrent: true');
+        }
+      }
+      
+      return null;
+    } catch (error: any) {
+      console.error('❌ [dashboardService] Error al obtener períodos académicos:', error);
+      return null;
+    }
+  },
+
   // Obtener los períodos académicos que representan los bimestres
   async getBimestres(periodoId: string): Promise<Bimestre[]> {
     try {
@@ -325,23 +354,53 @@ export const dashboardService = {
         const fechaInicioMs = fechaInicio.getTime();
         const fechaFinMs = fechaFin.getTime();
 
-        // Determinar el estado del período
+        // Usar el status del backend, pero también verificar las fechas para completados automáticos
         let estado: 'completado' | 'activo' | 'proximo' = 'proximo';
         let progreso = 0;
 
-        if (hoyMs >= fechaInicioMs && hoyMs <= fechaFinMs) {
-          // Período activo
-          estado = 'activo';
-          const duracionTotal = fechaFinMs - fechaInicioMs;
-          const tiempoTranscurrido = hoyMs - fechaInicioMs;
-          progreso = Math.min(99, Math.max(1, Math.round((tiempoTranscurrido / duracionTotal) * 100)));
-        } else if (hoyMs > fechaFinMs) {
-          // Período completado
-          estado = 'completado';
-          progreso = 100;
-        } else {
-          // Período próximo (por defecto)
-          progreso = 0;
+        // Mapear el status del backend al estado del frontend
+        switch (periodo.status) {
+          case 'active':
+            // Si está activo pero la fecha ya pasó, mostrar como completado
+            if (hoyMs > fechaFinMs) {
+              estado = 'completado';
+              progreso = 100;
+            } else {
+              estado = 'activo';
+              // Calcular progreso solo si está activo y en fecha
+              if (hoyMs >= fechaInicioMs && hoyMs <= fechaFinMs) {
+                const duracionTotal = fechaFinMs - fechaInicioMs;
+                const tiempoTranscurrido = hoyMs - fechaInicioMs;
+                progreso = Math.min(99, Math.max(1, Math.round((tiempoTranscurrido / duracionTotal) * 100)));
+              } else {
+                progreso = 0; // Aún no empieza
+              }
+            }
+            break;
+          case 'completed':
+            estado = 'completado';
+            progreso = 100;
+            break;
+          case 'cancelled':
+            estado = 'completado'; // Tratar cancelados como completados en el frontend
+            progreso = 100;
+            break;
+          case 'upcoming':
+          default:
+            // Si está marcado como upcoming pero la fecha ya pasó, mostrar como completado
+            if (hoyMs > fechaFinMs) {
+              estado = 'completado';
+              progreso = 100;
+            } else if (hoyMs >= fechaInicioMs && hoyMs <= fechaFinMs) {
+              estado = 'activo'; // Si está en rango de fechas, mostrar como activo
+              const duracionTotal = fechaFinMs - fechaInicioMs;
+              const tiempoTranscurrido = hoyMs - fechaInicioMs;
+              progreso = Math.min(99, Math.max(1, Math.round((tiempoTranscurrido / duracionTotal) * 100)));
+            } else {
+              estado = 'proximo';
+              progreso = 0;
+            }
+            break;
         }
 
         return {
@@ -378,6 +437,84 @@ export const dashboardService = {
     }
   },
 
+  async getAllGrados(): Promise<any[]> {
+    try {
+      // Obtener todos los estudiantes para extraer los grados únicos
+      const estudiantesResponse = await api.get('/students');
+      
+      let todosEstudiantes: any[] = [];
+      if (Array.isArray(estudiantesResponse.data)) {
+        todosEstudiantes = estudiantesResponse.data;
+      } else if (estudiantesResponse.data?.data) {
+        todosEstudiantes = Array.isArray(estudiantesResponse.data.data)
+          ? estudiantesResponse.data.data
+          : [];
+      }
+
+      // Extraer grados únicos de todos los estudiantes
+      const gradosUnicos = new Set<string>();
+      const gradosList: any[] = [];
+
+      todosEstudiantes.forEach((estudiante: any) => {
+        if (estudiante.grados) {
+          let gradosEstudiante: any[] = [];
+          
+          if (typeof estudiante.grados === 'string') {
+            try {
+              gradosEstudiante = JSON.parse(estudiante.grados);
+            } catch (e) {
+              console.error('Error parsing grados JSON:', e);
+              return;
+            }
+          } else if (Array.isArray(estudiante.grados)) {
+            gradosEstudiante = estudiante.grados;
+          }
+
+          gradosEstudiante.forEach((grado: any) => {
+            if (grado && !gradosUnicos.has(grado)) {
+              gradosUnicos.add(grado);
+              
+              // Parsear el grado para extraer componentes
+              const match = grado.match(/^(\d+)°\s+(.+?)(?:\s+([A-Z]))?$/);
+              if (match) {
+                gradosList.push({
+                  grado: match[1],
+                  nivel: match[2],
+                  seccion: match[3] || ''
+                });
+              } else {
+                // Si no coincide con el patrón, agregar como está
+                gradosList.push({
+                  grado: grado,
+                  nivel: grado,
+                  seccion: ''
+                });
+              }
+            }
+          });
+        }
+      });
+
+      // Ordenar grados numéricamente y luego alfabéticamente
+      gradosList.sort((a, b) => {
+        const numA = parseInt(a.grado) || 0;
+        const numB = parseInt(b.grado) || 0;
+        
+        if (numA !== numB) {
+          return numA - numB;
+        }
+        
+        return a.nivel.localeCompare(b.nivel);
+      });
+
+      console.log('🔍 [getAllGrados] Grados encontrados:', gradosList);
+      return gradosList;
+    } catch (error) {
+      console.error('Error al obtener todos los grados:', error);
+      return [];
+    }
+  },
+
   async getGradosConMaterias(): Promise<GradoConMaterias[]> {
     try {
       const teacherProfile = await this.getTeacherProfile();
@@ -410,29 +547,36 @@ export const dashboardService = {
 
           const estudiantesEnGrado = todosEstudiantes.filter((est: any) => {
             if (!est || !est.grados) return false;
-            const gradosEstudiante = Array.isArray(est.grados) ? est.grados : [];
+            
+            // Parsear grados si viene como string JSON
+            let gradosEstudiante: any[] = [];
+            if (typeof est.grados === 'string') {
+              try {
+                gradosEstudiante = JSON.parse(est.grados);
+              } catch (e) {
+                console.error('Error parsing grados JSON:', e);
+                return false;
+              }
+            } else if (Array.isArray(est.grados)) {
+              gradosEstudiante = est.grados;
+            }
+
+            // Debug: mostrar lo que estamos comparando
+            console.log('🔍 Debug - Estudiante:', est.nombre, 'Grados:', gradosEstudiante, 'Buscando:', gradoExacto);
 
             return gradosEstudiante.some((g: any) => {
               const grado = typeof g === 'string' ? g.trim() : (g.nombre || '').trim();
+              console.log('🔍 Comparando:', `"${grado}" === "${gradoExacto}"`, grado === gradoExacto);
               return grado === gradoExacto;
             });
           });
 
-          const materiasDelGrado = materiasDocente
-            .filter((m: any) => m && m.materia)
-            .map((m: any) => ({
-              ...m.materia,
-              seccion: m.seccion || 'A',
-              docenteId: teacherProfile.id,
-              grado: gradoExacto,
-              periodoAcademico: m.periodoAcademico,
-              estado: m.estado,
-              horario: m.horario
-            }));
-
           // Parsear el nombre del grado para obtener nivel y sección
-          // Formatos esperados: "1° Primaria A", "4° Bachillerato...", "Kinder A"
+          // Formatos esperados: "1° Primaria A", "4° Bachillerato en Ciencias y Letras", "Kinder A"
           const match = gradoExacto.match(/^(\d+)°\s+(.+?)(?:\s+([A-Z]))?$/);
+          
+          // Si no hay sección al final, intentar sin capturar sección
+          const matchWithoutSection = gradoExacto.match(/^(\d+)°\s+(.+)$/);
 
           let nivel = '';
           let seccion = '';
@@ -443,10 +587,11 @@ export const dashboardService = {
             const gradoNumero = match[1]; // "1"
             nivel = match[2]; // "Básico"
             seccion = match[3] || 'A';
-
-            // Actualizamos el grado exacto para que sea solo el número si es un formato estándar
-            // Esto evita que en el frontend se muestre "1° Básico A° Básico"
-            // Pero mantenemos el original para las referencias de materias si es necesario
+          } else if (matchWithoutSection) {
+            // Si el formato es "4° Bachillerato en Ciencias y Letras" sin sección
+            const gradoNumero = matchWithoutSection[1]; // "4"
+            nivel = matchWithoutSection[2]; // "Bachillerato en Ciencias y Letras"
+            seccion = 'A'; // Sección por defecto
           } else {
             // Fallback para otros formatos
             const seccionMatch = gradoExacto.match(/\s+([A-Z])$/);
@@ -454,22 +599,48 @@ export const dashboardService = {
             nivel = gradoExacto.replace(/\s+[A-Z]$/, '').trim();
           }
 
-          // Si logramos extraer un número de grado (ej: "1"), usamos ese como el grado a mostrar
-          // Si no (ej: "Kinder"), usamos el nombre completo
-          const gradoDisplay = match ? match[1] : gradoExacto.replace(/\s+[A-Z]$/, '').trim();
-
-          if (materiasDelGrado.length === 0 && materiasDocente.length > 0) {
-            materiasDocente.forEach((m: any) => {
-              if (m && m.materia) {
-                materiasDelGrado.push({
-                  ...m.materia,
-                  seccion: m.seccion || seccion,
-                  docenteId: m.docenteId || teacherProfile.id,
-                  grado: gradoExacto
-                });
+          // Procesar materias - eliminar duplicados si el backend no lo hace
+          const materiasDelGrado: any[] = [];
+          
+          if (materiasDocente.length > 0) {
+            // Deduplicar materias por ID
+            const materiasUnicas = new Map();
+            
+            materiasDocente.forEach((materia: any) => {
+              // Manejar tanto estructura antigua como nueva
+              const materiaData = materia.materia || materia;
+              
+              if (materiaData && materiaData.id) {
+                const materiaId = materiaData.id;
+                
+                // Si ya existe esta materia, no agregarla de nuevo
+                if (!materiasUnicas.has(materiaId)) {
+                  console.log('🔍 [Dashboard] Agregando materia única:', {
+                    id: materiaData.id,
+                    nombre: materiaData.nombre,
+                    tienePeriodosAsignados: !!materia.periodosAsignados
+                  });
+                  
+                  materiasUnicas.set(materiaId, {
+                    ...materiaData,
+                    seccion: seccion,
+                    docenteId: teacherProfile.id,
+                    grado: gradoExacto,
+                    periodosAsignados: materia.periodosAsignados || []
+                  });
+                } else {
+                  console.log('⚠️ [Dashboard] Ignorando materia duplicada:', materiaData.nombre);
+                }
               }
             });
+            
+            // Convertir el Map a array
+            materiasDelGrado.push(...materiasUnicas.values());
           }
+
+          // Si logramos extraer un número de grado (ej: "1"), usamos ese como el grado a mostrar
+          // Si no (ej: "Kinder"), usamos el nombre completo
+          const gradoDisplay = match ? match[1] : (matchWithoutSection ? matchWithoutSection[1] : gradoExacto.replace(/\s+[A-Z]$/, '').trim());
 
           return {
             grado: gradoDisplay, // Usamos el grado formateado (ej: "1" o "Kinder")
@@ -595,33 +766,98 @@ export const dashboardService = {
     seccion?: string;
   }): Promise<Estudiante[]> {
     try {
-      // Formatear el grado según el formato esperado por el backend (ej: "1° Primaria A")
-      const formattedGrado = `${params.grado}° ${params.nivel || ''} ${params.seccion || ''}`.trim();
+      // Formatear el grado según el formato esperado por el backend
+      // Si el nivel ya contiene el grado completo, usarlo directamente
+      let formattedGrado = params.nivel || '';
+      if (!formattedGrado.includes(`${params.grado}°`)) {
+        formattedGrado = `${params.grado}° ${params.nivel || ''}`.trim();
+      }
+      // Solo añadir sección si no es una sección por defecto "A" y el nivel no ya termina con letra
+      if (params.seccion && params.seccion !== 'A' && !/[A-Z]$/.test(formattedGrado)) {
+        formattedGrado += ` ${params.seccion}`;
+      }
+      formattedGrado = formattedGrado.trim();
       
-      const queryParams = {
-        grado: formattedGrado,
-        nivel: params.nivel,
-        seccion: params.seccion
-      };
+      console.log('🔍 getEstudiantesPorGrado - formattedGrado:', formattedGrado);
+      
+      // Intentar con el endpoint especializado primero
+      try {
+        const response = await api.get('/students/por-grado', {
+          params: {
+            grado: formattedGrado,
+            nivel: params.nivel,
+            seccion: params.seccion
+          },
+          paramsSerializer: (params) => {
+            const searchParams = new URLSearchParams();
+            Object.entries(params).forEach(([key, value]) => {
+              if (value !== undefined && value !== null) {
+                searchParams.append(key, String(value));
+              }
+            });
+            return searchParams.toString();
+          }
+        });
 
-      const response = await api.get('/students/por-grado', {
-        params: queryParams,
-        paramsSerializer: (params) => {
-          const searchParams = new URLSearchParams();
-          Object.entries(params).forEach(([key, value]) => {
-            if (value !== undefined && value !== null) {
-              searchParams.append(key, String(value));
-            }
-          });
-          return searchParams.toString();
+        console.log('🔍 getEstudiantesPorGrado - API Response:', response.data);
+        console.log('🔍 getEstudiantesPorGrado - Response length:', Array.isArray(response.data) ? response.data.length : 'not array');
+
+        if (Array.isArray(response.data) && response.data.length > 0) {
+          return response.data;
         }
-      });
-
-      if (!Array.isArray(response.data)) {
-        return [];
+      } catch (error) {
+        console.log('🔍 getEstudiantesPorGrado - Specialized endpoint failed, trying general endpoint');
       }
 
-      return response.data;
+      // Si el endpoint especializado no funciona, usar el endpoint general y filtrar manualmente
+      console.log('🔍 getEstudiantesPorGrado - Using general /students endpoint');
+      const allStudentsResponse = await api.get('/students');
+      
+      let allStudents: any[] = [];
+      if (Array.isArray(allStudentsResponse.data)) {
+        allStudents = allStudentsResponse.data;
+      } else if (allStudentsResponse.data?.data) {
+        allStudents = Array.isArray(allStudentsResponse.data.data)
+          ? allStudentsResponse.data.data
+          : [];
+      } else if (allStudentsResponse.data) {
+        allStudents = [allStudentsResponse.data];
+      }
+
+      console.log('🔍 getEstudiantesPorGrado - Total students from general endpoint:', allStudents.length);
+
+      // Filtrar manualmente por el grado exacto
+      const filteredStudents = allStudents.filter((est: any) => {
+        if (!est || !est.grados) return false;
+        
+        // Parsear grados si viene como string JSON
+        let gradosEstudiante: any[] = [];
+        if (typeof est.grados === 'string') {
+          try {
+            gradosEstudiante = JSON.parse(est.grados);
+          } catch (e) {
+            console.error('Error parsing grados JSON:', e);
+            return false;
+          }
+        } else if (Array.isArray(est.grados)) {
+          gradosEstudiante = est.grados;
+        }
+
+        const hasGrado = gradosEstudiante.some((g: any) => {
+          const grado = typeof g === 'string' ? g.trim() : (g.nombre || '').trim();
+          return grado === formattedGrado;
+        });
+
+        if (hasGrado) {
+          console.log('🔍 getEstudiantesPorGrado - Found student:', est.nombre, 'with grade:', formattedGrado);
+        }
+
+        return hasGrado;
+      });
+
+      console.log('🔍 getEstudiantesPorGrado - Final filtered count:', filteredStudents.length);
+      return filteredStudents;
+
     } catch (error) {
       console.error('Error al obtener estudiantes por grado:', error);
       throw error;

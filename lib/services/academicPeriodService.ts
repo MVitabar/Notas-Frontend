@@ -130,7 +130,6 @@ export const academicPeriodService = {
         periods
           .filter(p => p.id !== id && p.isCurrent)
           .map(p => this.updatePeriod(p.id, { 
-            ...p, 
             status: 'cancelled', 
             isCurrent: false 
           }))
