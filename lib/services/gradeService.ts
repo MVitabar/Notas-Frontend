@@ -209,9 +209,20 @@ const gradeService: IGradeService = {
   async getByStudent(estudianteId: string, periodoId?: string): Promise<CalificacionPorEstudiante[]> {
     try {
       const params = new URLSearchParams();
-      if (periodoId) params.append('periodoId', periodoId);
+      console.log('🔍 gradeService.getByStudent - params iniciales:', params.toString());
+      console.log('🔍 gradeService.getByStudent - periodoId recibido:', periodoId);
+      
+      if (periodoId) {
+        params.append('periodoId', periodoId);
+        console.log('🔍 gradeService.getByStudent - params después de append:', params.toString());
+      }
 
-      const response = await api.get<CalificacionPorEstudiante[]>(`/calificaciones/estudiante/${estudianteId}?${params.toString()}`);
+      const fullUrl = params.toString() 
+  ? `/calificaciones/estudiante/${estudianteId}?${params.toString()}`
+  : `/calificaciones/estudiante/${estudianteId}`;
+console.log('🔍 gradeService.getByStudent - URL completa:', fullUrl);
+
+      const response = await api.get<CalificacionPorEstudiante[]>(fullUrl);
       return response.data || [];
     } catch (error: any) {
       if (error.response?.status === 404) {
@@ -744,9 +755,22 @@ const gradeService: IGradeService = {
   // Obtener evaluaciones de hábitos de un estudiante
   async getHabitGrades(estudianteId: string, periodoId: string): Promise<any[]> {
     try {
+      console.log('🔍 getHabitGrades - Iniciando llamada:', {
+        estudianteId,
+        periodoId,
+        url: `/calificaciones-habitos/estudiante/${estudianteId}?periodoId=${periodoId}`
+      });
+      
       const response = await api.get(`/calificaciones-habitos/estudiante/${estudianteId}?periodoId=${periodoId}`);
       
+      console.log('🔍 getHabitGrades - Respuesta de API:', {
+        status: response.status,
+        data: response.data,
+        dataType: typeof response.data
+      });
+      
       if (!response.data) {
+        console.log('🔍 getHabitGrades - No hay datos en respuesta, retornando array vacío');
         return [];
       }
 
@@ -856,7 +880,23 @@ const gradeService: IGradeService = {
       
       return habitData;
     } catch (error: any) {
-      console.error('Error al obtener evaluaciones de hábitos:', error);
+      console.error('🔍 getHabitGrades - Error detallado:', {
+        error,
+        errorMessage: error.message,
+        errorStatus: error.response?.status,
+        errorData: error.response?.data,
+        estudianteId,
+        periodoId
+      });
+      
+      // Si es un error 404, probablemente no hay evaluaciones de hábitos
+      if (error.response?.status === 404) {
+        console.log('🔍 getHabitGrades - No se encontraron evaluaciones (404), retornando array vacío');
+        return [];
+      }
+      
+      // Para otros errores, también retornar array vacío para no romper la aplicación
+      console.log('🔍 getHabitGrades - Error general, retornando array vacío como fallback');
       return [];
     }
   },

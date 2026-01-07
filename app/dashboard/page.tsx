@@ -378,8 +378,7 @@ export function Dashboard() {
     return initial;
   });
   const [selectedStudent, setSelectedStudent] = useState<Estudiante | null>(null);
-  const [activeTab, setActiveTab] = useState<"info" | "grades" | "habitos" | "extraescolar">("info"); // 'info', 'grades', or 'extraescolar'
-  const [extraescolarGrades, setExtraescolarGrades] = useState<Record<string, { id: string; valor: ValorConceptual; materiaId: string }>>({});
+  const [activeTab, setActiveTab] = useState<"info" | "grades" | "habitos">("info"); // 'info', 'grades', or 'habitos'
   const [habitEvaluationsGrades, setHabitEvaluationsGrades] = useState<Record<string, { id: string; valor: ValorConceptual; evaluacionHabitoId: string }>>({});
   const [extraescolarHabitGrades, setExtraescolarHabitGrades] = useState<Record<string, { id: string; valor: ValorConceptual; evaluacionHabitoId: string }>>({});
   const [grades, setGrades] = useState<CalificacionResponse[]>([]);
@@ -638,22 +637,12 @@ export function Dashboard() {
         return mappedGrade;
       });
 
-      // Separate regular and extracurricular grades
+      // Separate regular grades (extracurriculars are now handled in the main grades flow)
       const regularGrades: CalificacionResponse[] = [];
-      const extraGrades: Record<string, { id: string; valor: ValorConceptual; materiaId: string }> = {};
 
       mappedGrades.forEach((g: any) => {
-        const esExtraescolar = g.esExtraescolar || isExtraescolar(g.materiaId);
-
-        if (esExtraescolar && g.materia?.nombre) {
-          extraGrades[g.materia.nombre] = {
-            id: g.id,
-            valor: g.valorConceptual || "",
-            materiaId: g.materia.id
-          };
-        } else {
-          regularGrades.push(g);
-        }
+        // All grades go to regularGrades now, extracurriculars are handled via habit grades
+        regularGrades.push(g);
       });
 
       // Separar las evaluaciones de hábitos por tipo (usando mismo enfoque que PDF)
@@ -713,7 +702,6 @@ export function Dashboard() {
       });
       
       setGrades(regularGrades);
-      setExtraescolarGrades(extraGrades);
       setHogarEvaluations(hogarEvals);
       setHabitoEvaluations(habitoEvals);
       setHabitEvaluationsGrades(habitEvaluationsGradesData); // ← Nuevo: cargar hábitos regulares
@@ -2362,7 +2350,7 @@ export function Dashboard() {
             {/* Tabs */}
             <Tabs
               value={activeTab}
-              onValueChange={(value) => setActiveTab(value as "info" | "grades" | "habitos" | "extraescolar")}
+              onValueChange={(value) => setActiveTab(value as "info" | "grades" | "habitos")}
               className="w-full"
             >
               <div className="border-b px-6">
@@ -2371,9 +2359,6 @@ export function Dashboard() {
                   <TabsTrigger value="grades">Calificaciones</TabsTrigger>
                   <TabsTrigger value="habitos">
                     Hábitos y Comportamientos
-                  </TabsTrigger>
-                  <TabsTrigger value="extraescolar">
-                    Actividades Extraescolares
                   </TabsTrigger>
                 </TabsList>
               </div>
@@ -2948,98 +2933,6 @@ export function Dashboard() {
                   </div>
                 </TabsContent>
 
-                {/* Actividades Extraescolares Tab */}
-                <TabsContent value="extraescolar" className="space-y-4">
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <h3 className="font-semibold text-blue-800 mb-4">
-                      Evaluación de Actividades Extraescolares
-                    </h3>
-
-                    {selectedStudent?.grados?.[0] ? (
-                      <div className="space-y-4">
-                        {/* Sección de Evaluaciones Extraescolares del Endpoint de Hábitos */}
-                        {habitGrades && habitGrades.length > 0 && (
-                          <div>
-                            <h4 className="font-medium text-blue-700 mb-3 flex items-center">
-                              <BookOpen className="h-4 w-4 mr-2" />
-                              Evaluaciones Extraescolares
-                            </h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {habitGrades
-                                .filter((h: any) => h.tipo === 'EXTRACURRICULAR')
-                                .map((evaluacion: any, index: number) => {
-                                  const currentGrade = extraescolarHabitGrades[evaluacion.evaluacionHabitoId]?.valor;
-                                  return (
-                                    <div key={`habit-extra-${index}`} className="bg-white p-3 rounded border border-blue-200">
-                                      <div className="flex justify-between items-center mb-2">
-                                        <h5 className="font-medium">{evaluacion.nombre || 'Sin nombre'}</h5>
-                                        <span className="text-xs text-gray-500">
-                                          ID: {evaluacion.evaluacionHabitoId?.slice(0, 8)}...
-                                        </span>
-                                      </div>
-                                      <div className="mb-3">
-                                        <div className="flex items-center space-x-2">
-                                          <span className="text-sm text-gray-500">
-                                            Evaluación:
-                                          </span>
-                                          <Select
-                                            value={currentGrade || ""}
-                                            onValueChange={async (value) => {
-                                              await handleSaveExtraescolarHabitGrade(evaluacion.evaluacionHabitoId, value as ValorConceptual);
-                                            }}
-                                          >
-                                            <SelectTrigger className="w-48">
-                                              <SelectValue placeholder="Sin evaluar">
-                                                {currentGrade ? getValorConceptualText(currentGrade as ValorConceptual) : "Seleccionar"}
-                                              </SelectValue>
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              <SelectItem value="DESTACA">Destaca</SelectItem>
-                                              <SelectItem value="AVANZA">Avanza</SelectItem>
-                                              <SelectItem value="NECESITA_MEJORAR">Necesita Mejorar</SelectItem>
-                                              <SelectItem value="INSATISFACTORIO">Insatisfactorio</SelectItem>
-                                            </SelectContent>
-                                          </Select>
-                                        </div>
-                                      </div>
-                                      <div className="grid grid-cols-2 gap-2 text-sm">
-                                        {['u1', 'u2', 'u3', 'u4'].map((periodo: string) => (
-                                          <div key={periodo} className="flex flex-col">
-                                            <span className="text-gray-600 font-medium">{periodo.toUpperCase()}:</span>
-                                            <span className="text-gray-800">
-                                              {evaluacion[periodo as keyof any] || '-'}
-                                            </span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                      {evaluacion.comentario && (
-                                        <div className="mt-2 pt-2 border-t border-blue-200">
-                                          <p className="text-sm text-gray-600">
-                                            <span className="font-medium">Comentario:</span> {evaluacion.comentario}
-                                          </p>
-                                        </div>
-                                      )}
-                                      {currentGrade && (
-                                        <div className="mt-2 pt-2 border-t border-blue-200">
-                                          <p className="text-sm text-green-600 font-medium">
-                                            Evaluación actual: {getValorConceptualText(currentGrade as ValorConceptual)}
-                                          </p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="p-4 text-center text-gray-500">
-                        No hay información del grado del estudiante.
-                      </div>
-                    )}
-                  </div>
-                </TabsContent>
               </div>
             </Tabs><div className="bg-gray-50 px-6 py-4 border-t flex justify-end gap-3">
               <Button variant="outline" onClick={closeStudentModal}>

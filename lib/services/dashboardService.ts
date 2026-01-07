@@ -257,12 +257,71 @@ export const dashboardService = {
   },
   async getMaterias(): Promise<MateriaResponse[]> {
     try {
-      console.log('Fetching materias from API...');
+      console.log('🔍 getMaterias - Iniciando llamada...');
       const response = await api.get<MateriaResponse[]>('/materias/docente/mis-materias');
-      console.log('Raw materias response:', response.data);
+      
+      console.log('🔍 getMaterias - Respuesta de API:', {
+        status: response.status,
+        data: response.data,
+        dataType: typeof response.data
+      });
+      
       return response.data || [];
-    } catch (error) {
-      console.error('Error al obtener las materias:', error);
+    } catch (error: any) {
+      console.error('🔍 getMaterias - Error detallado:', {
+        error,
+        errorMessage: error.message,
+        errorStatus: error.response?.status,
+        errorData: error.response?.data
+      });
+      
+      // Si es un error 401, 403 o 404, probablemente es un problema de permisos o endpoint no disponible
+      if (error.response?.status === 401) {
+        console.log('🔍 getMaterias - Error de autenticación (401), retornando array vacío');
+      } else if (error.response?.status === 403) {
+        console.log('🔍 getMaterias - Error de permisos (403), retornando array vacío');
+      } else if (error.response?.status === 404) {
+        console.log('🔍 getMaterias - Endpoint no encontrado (404), retornando array vacío');
+      } else {
+        console.log('🔍 getMaterias - Error general, retornando array vacío como fallback');
+      }
+      
+      return [];
+    }
+  },
+
+  // Nuevo método para obtener todas las materias (para administradores)
+  async getAllMaterias(): Promise<MateriaResponse[]> {
+    try {
+      console.log('🔍 getAllMaterias - Iniciando llamada para administrador...');
+      const response = await api.get<MateriaResponse[]>('/materias');
+      
+      console.log('🔍 getAllMaterias - Respuesta de API:', {
+        status: response.status,
+        data: response.data,
+        dataType: typeof response.data
+      });
+      
+      return response.data || [];
+    } catch (error: any) {
+      console.error('🔍 getAllMaterias - Error detallado:', {
+        error,
+        errorMessage: error.message,
+        errorStatus: error.response?.status,
+        errorData: error.response?.data
+      });
+      
+      // Manejo de errores específicos
+      if (error.response?.status === 401) {
+        console.log('🔍 getAllMaterias - Error de autenticación (401), retornando array vacío');
+      } else if (error.response?.status === 403) {
+        console.log('🔍 getAllMaterias - Error de permisos (403), retornando array vacío');
+      } else if (error.response?.status === 404) {
+        console.log('🔍 getAllMaterias - Endpoint no encontrado (404), retornando array vacío');
+      } else {
+        console.log('🔍 getAllMaterias - Error general, retornando array vacío como fallback');
+      }
+      
       return [];
     }
   },

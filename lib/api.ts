@@ -13,7 +13,7 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  withCredentials: true, // Importante para enviar cookies
+  withCredentials: false, // Deshabilitado para evitar conflictos con el token Bearer
 });
 
 // Interceptor para manejar el token de autenticación
@@ -41,9 +41,9 @@ api.interceptors.request.use((config) => {
     const payload = JSON.parse(atob(token.split('.')[1]));
     const isExpired = payload.exp * 1000 < Date.now();
     
+    // No rechazar por expiración, dejar que el backend decida
     if (isExpired) {
-      redirectToLogin();
-      return Promise.reject(new Error('La sesión ha expirado'));
+      console.warn('Token expirado, pero dejando que el backend decida');
     }
     
     // Agregar el token a los headers
@@ -51,8 +51,18 @@ api.interceptors.request.use((config) => {
       config.headers.Authorization = `Bearer ${token}`;
     }
     
+    // DEBUG: Mostrar exactamente qué se está enviando
+    console.log('🔍 Axios Request Config:', {
+      url: config.url,
+      method: config.method,
+      headers: config.headers,
+      baseURL: config.baseURL,
+      fullURL: `${config.baseURL}${config.url}`
+    });
+    
   } catch (error) {
     console.error('Error al verificar el token:', error);
+    // Solo rechazar si el token está malformado, no si está expirado
     redirectToLogin();
     return Promise.reject(new Error('Error en la autenticación'));
   }
