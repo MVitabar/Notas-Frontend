@@ -327,6 +327,18 @@ export default function NewTeacherPage() {
       }
     });
     
+    // Add extracurricular subjects for each selected grade
+    selectedGrades.forEach(grade => {
+      if (extracurricularSubjects[grade as keyof typeof extracurricularSubjects]) {
+        const extracurriculars = extracurricularSubjects[grade as keyof typeof extracurricularSubjects];
+        if (extracurriculars.length > 0) {
+          // Create a separate category for extracurricular subjects
+          const categoryKey = `Extracurriculares - ${grade}`;
+          filteredSubjects[categoryKey] = extracurriculars;
+        }
+      }
+    });
+    
     return filteredSubjects;
   };
   
@@ -839,7 +851,11 @@ export default function NewTeacherPage() {
                         
                         return (
                           <div key={category} className="space-y-2">
-                            <h4 className="text-sm font-medium text-gray-700">{category}</h4>
+                            <h4 className={`text-sm font-medium ${
+                              category.startsWith('Extracurriculares') ? 'text-blue-600' : 'text-gray-700'
+                            }`}>
+                              {category}
+                            </h4>
                             <div className="space-y-1 pl-2">
                               {filteredCategorySubjects.map((subject) => (
                                 <div key={`${category}-${subject}`} className="flex items-center space-x-2">
@@ -849,18 +865,17 @@ export default function NewTeacherPage() {
                                     onCheckedChange={(checked) =>
                                       handleSubjectChange(subject, checked as boolean)
                                     }
-                                    disabled={Object.values(extracurricularSubjects).flat().includes(subject)}
                                   />
                                   <Label 
                                     htmlFor={`subject-${category}-${subject}`.replace(/\s+/g, '-').toLowerCase()} 
                                     className={`text-sm font-normal ${
-                                      Object.values(extracurricularSubjects).flat().includes(subject) ? 'text-muted-foreground' : ''
+                                      category.startsWith('Extracurriculares') ? 'text-blue-600 font-medium' : ''
                                     }`}
                                   >
                                     {subject}
-                                    {Object.values(extracurricularSubjects).flat().includes(subject) && (
-                                      <span className="ml-2 text-xs text-muted-foreground">
-                                        (Asignada automáticamente)
+                                    {category.startsWith('Extracurriculares') && (
+                                      <span className="ml-2 text-xs text-blue-600">
+                                        (Extracurricular)
                                       </span>
                                     )}
                                   </Label>

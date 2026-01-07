@@ -974,8 +974,56 @@ export function Dashboard() {
 
   // Function to check if a materia is extracurricular
   const isExtraescolar = (materiaId: string) => {
-    const materia = materias.find(m => String(m.id) === materiaId);
-    return materia?.materia?.tipoMateria?.nombre === 'EXTRAESCOLAR';
+    // Primero buscar en el array materias (datos cargados de API)
+    let materia = materias.find(m => String(m.id) === materiaId);
+    
+    // Si no se encuentra, buscar en teacherProfile.materias
+    if (!materia && teacherProfile?.materias) {
+      materia = teacherProfile.materias.find((m: any) => String(m.materiaId) === materiaId);
+      
+      // Si encontramos la materia en teacherProfile, extraer la información correcta
+      if (materia) {
+        const materiaData = materia.materia || materia;
+        
+        // Crear un objeto con la estructura esperada
+        materia = {
+          ...materia,
+          materia: materiaData
+        };
+      }
+    }
+    
+    // Obtener el nombre de la materia (manejar ambas estructuras)
+    const materiaNombre = materia?.materia?.nombre || (materia as any)?.nombre || '';
+    
+    // Primero verificar por tipoMateria
+    if (materia?.materia?.tipoMateria?.nombre === 'EXTRAESCOLAR') {
+      console.log('🔍 isExtraescolar - Detectado por tipoMateria: EXTRAESCOLAR');
+      return true;
+    }
+    
+    // Si no, verificar por nombre de materia extracurricular
+    if (materiaNombre) {
+      // Lista de materias extracurriculares según academicData.ts
+      const extracurricularNames = [
+        'comprensión de lectura',
+        'lógica matemática', 
+        'moral cristiana',
+        'programa de lectura',
+        'razonamiento verbal'
+      ];
+      
+      const isExtracurricularByName = extracurricularNames.some(name => materiaNombre.toLowerCase().includes(name));
+      console.log('🔍 isExtraescolar - Verificando por nombre:', {
+        materiaNombre,
+        isExtracurricularByName
+      });
+      
+      return isExtracurricularByName;
+    }
+    
+    console.log('🔍 isExtraescolar - No se detectó como extracurricular');
+    return false;
   };
 
   // Function to get extracurricular subjects for a specific grade
@@ -983,10 +1031,28 @@ export function Dashboard() {
     if (!grado || loadingMaterias) return [];
     
     // Filter subjects that are marked as extracurricular and belong to this grade
-    return materias.filter(materia => 
-      materia.materia?.tipoMateria?.nombre === 'EXTRAESCOLAR' && 
-      materia.seccion === grado
-    );
+    return materias.filter(materia => {
+      // Check by tipoMateria first
+      if (materia.materia?.tipoMateria?.nombre === 'EXTRAESCOLAR') {
+        return materia.seccion === grado;
+      }
+      
+      // Check by name (same logic as isExtraescolar)
+      if (materia.materia?.nombre) {
+        const materiaNombre = materia.materia.nombre.toLowerCase();
+        const extracurricularNames = [
+          'comprensión de lectura',
+          'lógica matemática', 
+          'moral cristiana',
+          'programa de lectura',
+          'razonamiento verbal'
+        ];
+        
+        return extracurricularNames.some(name => materiaNombre.includes(name)) && materia.seccion === grado;
+      }
+      
+      return false;
+    });
   }, [materias, loadingMaterias]);
 
   // Fetch grades for the selected class context
@@ -1228,14 +1294,10 @@ export function Dashboard() {
     // Try to get the student ID from either selectedStudent or editingId
     const studentId = selectedStudent?.id || editingId;
     
-    console.log('Datos iniciales:', {
-      selectedStudentId: selectedStudent?.id,
-      editingId,
-      resolvedStudentId: studentId,
-      currentPeriodId: currentPeriod?.id,
-      newGrade,
-      classGrades: classGrades.map(g => ({ id: g.id, estudianteId: g.estudianteId, materiaId: g.materiaId, calificacion: g.calificacion }))
-    });
+    // Verificar si es extracurricular ANTES de continuar
+    const esExtraescolar = isExtraescolar(newGrade.materiaId);
+    console.log('🔍 handleSaveGrade - ¿Es extracurricular?:', esExtraescolar);
+    console.log('🔍 handleSaveGrade - Materia:', newGrade.nombreMateria);
 
     try {
       if (!studentId || !currentPeriod?.id) {
@@ -1398,36 +1460,113 @@ export function Dashboard() {
           unidad = evaluationToUnitMap[newGrade.tipoEvaluacion] || '';
         }
         
-        console.log('Creando nueva calificación:', {
-          materia: newGrade.nombreMateria,
-          esExtraescolar,
-          materiaId: newGrade.materiaId,
-          unidad: unidad
-        });
+        // Si es extracurricular, guardar como evaluación de hábito en lugar de calificación académica
+        if (esExtraescolar) {
+          console.log('🔍 handleSaveGrade - Detectada materia extracurricular, guardando como evaluación de hábito');
+          
+          // Buscar el evaluacionHabitoId correspondiente a esta materia extracurricular
+          const materiaEncontrada = teacherProfile?.materias?.find((m: any) => String(m.materiaId) === newGrade.materiaId);
+          let evaluacionHabitoId = '';
+          
+          if (materiaEncontrada) {
+            // Buscar en las evaluaciones de hábitos extracurriculares
+            const habitGrades = await gradeService.getHabitGrades(selectedStudent.id, currentPeriod.id);
+            const extracurricularHabit = habitGrades.find((h: any) => 
+              h.tipo === 'EXTRACURRICULAR' && 
+              h.nombre === (materiaEncontrada.materia?.nombre || (materiaEncontrada as any).nombre)
+            );
+            
+            if (extracurricularHabit) {
+              evaluacionHabitoId = extracurricularHabit.evaluacionHabitoId;
+              console.log('🔍 handleSaveGrade - evaluacionHabitoId encontrado:', evaluacionHabitoId);
+            }
+          }
+          
+          if (!evaluacionHabitoId) {
+            console.error('🔍 handleSaveGrade - No se encontró evaluacionHabitoId para la materia extracurricular');
+            toast.error("No se encontró la evaluación de hábito correspondiente para esta materia extracurricular");
+            return;
+          }
+          
+          // Usar la función existente para guardar como evaluación de hábito extracurricular
+          await handleSaveExtraescolarHabitGrade(evaluacionHabitoId, newGrade.valorConceptual as ValorConceptual);
+          console.log('🔍 handleSaveGrade - Evaluación extracurricular guardada correctamente como hábito');
+          return;
+        }
 
-        const gradeData: CreateCalificacionRequest = {
-          userMateriaId: newGrade.materiaId,
-          estudianteId: selectedStudent.id,
-          periodoId: currentPeriod.id,
-          tipoCalificacion: newGrade.tipoCalificacion,
-          tipoEvaluacion: newGrade.tipoEvaluacion,
-          calificacion: newGrade.calificacion,
-          valorConceptual: newGrade.valorConceptual as ValorConceptual,
-          comentario: newGrade.comentario,
-          unidad: unidad, // Agregar la unidad determinada
-          esExtraescolar: esExtraescolar,
-          nombreMateria: newGrade.nombreMateria
-        };
+        // Si es extracurricular, verificar si ya existe una calificación para actualizarla
+        let existingGradeForUpdate = null;
+        if (esExtraescolar) {
+          existingGradeForUpdate = classGrades.find(
+            grade => grade.estudianteId === selectedStudent.id && 
+                    grade.materiaId === newGrade.materiaId
+          );
+          console.log('🔍 handleSaveGrade - Buscando calificación existente para extracurricular:', existingGradeForUpdate);
+        }
 
-        console.log('🔍 Creando nueva calificación con unidad:', unidad);
-        console.log('Datos completos para crear:', gradeData);
+        if (existingGradeForUpdate) {
+          // Actualizar calificación existente
+          console.log('🔍 handleSaveGrade - Actualizando calificación extracurricular existente');
+          
+          const updateData: UpdateCalificacionRequest = {
+            tipoCalificacion: newGrade.tipoCalificacion,
+            tipoEvaluacion: newGrade.tipoEvaluacion,
+            calificacion: newGrade.calificacion,
+            valorConceptual: newGrade.valorConceptual as ValorConceptual,
+            comentario: newGrade.comentario,
+            materiaId: newGrade.materiaId,
+            periodoId: currentPeriod.id,
+            unidad: unidad,
+            esExtraescolar: esExtraescolar
+          };
+          
+          console.log('🔍 handleSaveGrade - Datos para actualizar extracurricular:', updateData);
+          const updatedGrade = await gradeService.update(existingGradeForUpdate.id, updateData);
+          console.log('🔍 handleSaveGrade - Calificación extracurricular actualizada:', updatedGrade);
+          toast.success("Calificación extracurricular actualizada correctamente");
+        } else {
+          // Crear nueva calificación
+          console.log('🔍 handleSaveGrade - Creando nueva calificación - esExtraescolar:', esExtraescolar);
 
-        const newGradeResponse = await gradeService.create(gradeData);
-        
-        // No agregar localmente, loadStudentGrades ya recargará los datos del servidor
-        // setClassGrades(prevGrades => [...prevGrades, newGradeResponse]);
-        
-        toast.success("Calificación guardada correctamente");
+          // Obtener el nombre real de la materia
+          let nombreMateriaReal = newGrade.nombreMateria;
+          if (!nombreMateriaReal) {
+            // Buscar la materia en teacherProfile.materias
+            const materiaEncontrada = teacherProfile?.materias?.find((m: any) => String(m.materiaId) === newGrade.materiaId);
+            if (materiaEncontrada) {
+              nombreMateriaReal = materiaEncontrada.materia?.nombre || (materiaEncontrada as any).nombre;
+            }
+            // Si no, buscar en el array materias
+            else {
+              const materiaGlobal = materias.find(m => String(m.id) === newGrade.materiaId);
+              nombreMateriaReal = (materiaGlobal as any)?.nombre;
+            }
+          }
+
+          const gradeData: CreateCalificacionRequest = {
+            userMateriaId: newGrade.materiaId,
+            estudianteId: selectedStudent.id,
+            periodoId: currentPeriod.id,
+            tipoCalificacion: newGrade.tipoCalificacion,
+            tipoEvaluacion: newGrade.tipoEvaluacion,
+            calificacion: newGrade.calificacion,
+            valorConceptual: newGrade.valorConceptual as ValorConceptual,
+            comentario: newGrade.comentario,
+            unidad: unidad,
+            esExtraescolar: esExtraescolar,
+            nombreMateria: nombreMateriaReal
+          };
+
+          console.log('🔍 handleSaveGrade - nombreMateriaReal:', nombreMateriaReal);
+          console.log('🔍 handleSaveGrade - esExtraescolar en gradeData:', gradeData.esExtraescolar);
+
+          const newGradeResponse = await gradeService.create(gradeData);
+          
+          console.log('🔍 handleSaveGrade - esExtraescolar en respuesta:', newGradeResponse.esExtraescolar);
+          console.log('🔍 handleSaveGrade - ¿La respuesta incluye esExtraescolar?:', 'esExtraescolar' in newGradeResponse);
+          
+          toast.success("Calificación guardada correctamente");
+        }
       }
 
       // Forzar una recarga de los datos del servidor para asegurar consistencia
@@ -1570,24 +1709,34 @@ export function Dashboard() {
 
       try {
         // Preparar los datos para enviar al backend
+        // Determinar la unidad según el período actual
+        let unidad = 'u1'; // valor por defecto
+        if (currentPeriod && 'unidadAsignada' in currentPeriod && currentPeriod.unidadAsignada) {
+          unidad = currentPeriod.unidadAsignada;
+          console.log('🔍 Extraescolar - Usando unidad del período actual:', unidad);
+        } else {
+          console.log('🔍 Extraescolar - Período sin unidadAsignada, usando valor por defecto u1');
+        }
+        
         const habitGradeData: SaveHabitGradesRequest = {
           periodoId: currentPeriod.id,
           calificaciones: [
             {
               evaluacionHabitoId: evaluacionHabitoId,
-              u1: valor,
+              [unidad]: valor, // Usar la unidad dinámica
               comentario: "Evaluación de actividad extracurricular"
             }
           ]
         };
 
         console.log('Enviando datos de extraescolar al backend:', habitGradeData);
+        console.log('🔍 Extraescolar - Unidad que se usará para guardar:', unidad);
         console.log('=== ANÁLISIS DEL PAYLOAD ===');
         console.log('periodoId:', habitGradeData.periodoId);
         console.log('calificaciones:', habitGradeData.calificaciones);
         console.log('Primera calificación:', habitGradeData.calificaciones[0]);
         console.log('evaluacionHabitoId:', habitGradeData.calificaciones[0].evaluacionHabitoId);
-        console.log('u1 (valor a guardar):', habitGradeData.calificaciones[0].u1);
+        console.log(`Campo ${unidad} (valor a guardar):`, (habitGradeData.calificaciones[0] as any)[unidad]);
         console.log('comentario:', habitGradeData.calificaciones[0].comentario);
         
         // 🔍 VERIFICACIÓN ESPECIAL PARA EXTRACURRICULARES
@@ -1596,6 +1745,14 @@ export function Dashboard() {
         console.log('¿El ID existe en las materias?', 'Sí, lo vimos en los logs anteriores');
         console.log('¿El backend debería procesarlo?', 'Sí, es una evaluación de hábito válida');
         console.log('=== FIN VERIFICACIÓN EXTRACURRICULAR ===');
+        
+        console.log('🔍 RESUMEN DE GUARDADO EXTRACURRICULAR:');
+        console.log('- Estudiante ID:', selectedStudent.id);
+        console.log('- Período ID:', currentPeriod.id);
+        console.log('- Unidad asignada del período:', currentPeriod?.unidadAsignada);
+        console.log('- Unidad que se usará:', unidad);
+        console.log('- Evaluación ID:', evaluacionHabitoId);
+        console.log('- Valor:', valor);
         
         await gradeService.saveHabitGrades(selectedStudent.id, habitGradeData);
 
@@ -2350,50 +2507,28 @@ export function Dashboard() {
                             <SelectContent>
                               {/* Deduplicar materias por materiaId para el dropdown */}
                               {(() => {
-                                console.log('🔍 [Dropdown] Materias del teacherProfile:', teacherProfile?.materias);
-                                
                                 if (!teacherProfile?.materias) {
-                                  console.log('❌ [Dropdown] No hay materias en teacherProfile');
                                   return null;
                                 }
                                 
                                 const materiasUnicas = new Map();
                                 
-                                teacherProfile.materias.forEach((materia, index) => {
-                                  console.log(`🔍 [Dropdown] Procesando materia ${index}:`, materia);
-                                  
-                                  // Obtener materiaId del objeto original con type assertion
+                                teacherProfile.materias.forEach((materia) => {
                                   const materiaWithId = materia as any;
                                   const materiaIdOriginal = materiaWithId.materiaId;
                                   const materiaData = materia.materia || materia;
-                                  console.log(`🔍 [Dropdown] materiaIdOriginal ${index}:`, materiaIdOriginal);
-                                  console.log(`🔍 [Dropdown] materiaData ${index}:`, materiaData);
                                   
-                                  if (materiaIdOriginal) {
-                                    console.log(`🔍 [Dropdown] materiaId encontrado ${index}:`, materiaIdOriginal);
-                                    
-                                    if (!materiasUnicas.has(materiaIdOriginal)) {
-                                      console.log(`🔍 [Dropdown] Agregando materia única ${materiaIdOriginal}:`, materiaData);
-                                      // Guardar la materia completa con su id real
-                                      materiasUnicas.set(materiaIdOriginal, {
-                                        ...materiaData,
-                                        materiaId: materiaIdOriginal
-                                      });
-                                    } else {
-                                      console.log(`⚠️ [Dropdown] Materia duplicada ignorada ${materiaIdOriginal}`);
-                                    }
-                                  } else {
-                                    console.log(`❌ [Dropdown] No tiene materiaId ${index}:`, materiaWithId);
+                                  if (materiaIdOriginal && !materiasUnicas.has(materiaIdOriginal)) {
+                                    materiasUnicas.set(materiaIdOriginal, {
+                                      ...materiaData,
+                                      materiaId: materiaIdOriginal
+                                    });
                                   }
                                 });
                                 
-                                console.log('🔍 [Dropdown] Materias únicas procesadas:', Array.from(materiasUnicas.values()));
-                                
-                                const result = Array.from(materiasUnicas.values()).map((materiaData) => {
+                                return Array.from(materiasUnicas.values()).map((materiaData) => {
                                   const materiaName = materiaData.nombre || materiaData.materia?.nombre || "Sin nombre";
-                                  // Usar el ID de la asignación (userMateriaId) para el value
                                   const userMateriaId = materiaData.id || materiaData.materia?.id;
-                                  console.log(`🔍 [Dropdown] Creando SelectItem - Nombre: ${materiaName}, userMateriaId: ${userMateriaId}`);
                                   
                                   return (
                                     <SelectItem
@@ -2404,9 +2539,6 @@ export function Dashboard() {
                                     </SelectItem>
                                   );
                                 });
-                                
-                                console.log('🔍 [Dropdown] SelectItems creados:', result.length);
-                                return result;
                               })()}
                             </SelectContent>
                           </Select>

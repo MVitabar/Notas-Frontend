@@ -136,6 +136,8 @@ export interface CalificacionPorEstudiante {
   calificacion: number | null;
   valorConceptual: ValorConceptual | null;
   comentario: string | null;
+  esExtraescolar: boolean; // Agregar campo esExtraescolar
+  unidad: string; // Agregar campo unidad
   materia: {
     id: string;
     nombre: string;
@@ -332,7 +334,9 @@ const gradeService: IGradeService = {
         tipoCalificacion: calificacion.tipoCalificacion,
         tipoEvaluacion: calificacion.tipoEvaluacion.trim(),
         comentario: calificacion.comentario || undefined,
-        unidad: calificacion.unidad || undefined // Agregar el campo unidad
+        unidad: calificacion.unidad || undefined, // Agregar el campo unidad
+        esExtraescolar: calificacion.esExtraescolar || false, // Agregar el campo esExtraescolar
+        nombreMateria: calificacion.nombreMateria || undefined // Agregar el campo nombreMateria
       };
 
       // No incluir la fecha ya que el servidor la genera automáticamente

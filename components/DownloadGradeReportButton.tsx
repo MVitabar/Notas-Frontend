@@ -99,6 +99,8 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
         setIsLoading(true);
         setError(null);
 
+        console.log('🔍 PDF - Iniciando fetchData para:', estudiante.nombre, estudiante.apellido);
+
         // 1. Obtener TODAS las calificaciones académicas del estudiante (sin filtrar por período)
         const grades = await gradeService.getByStudent(
           estudiante.id,
@@ -108,6 +110,9 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
         console.log('🔍 PDF - Calificaciones recibidas:', grades);
         console.log('🔍 PDF - Total de calificaciones:', grades.length);
         console.log('🔍 PDF - Estructura de primera calificación:', grades[0]);
+        console.log('🔍 PDF - Campos de calificación:', grades[0] ? Object.keys(grades[0]) : 'No hay calificaciones');
+        console.log('🔍 PDF - Campo esExtraescolar en getByStudent:', grades[0] ? grades[0].esExtraescolar : 'No disponible');
+        console.log('🔍 PDF - Campo unidad en getByStudent:', grades[0] ? grades[0].unidad : 'No disponible');
 
         // 2. Inicializar estructura de hábitos con valores por defecto
         let habitData: {
@@ -181,6 +186,7 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
               nombre: materia.nombre || 'Materia sin nombre',
               tipoMateria: materia.tipoMateria || 'Sin tipo',
               tipoMateriaId: materia.tipoMateriaId,
+              esExtraescolar: grade.esExtraescolar || false, // Agregar campo esExtraescolar
               // Inicializar todas las unidades en 0
               u1: 0,
               u2: 0,
@@ -239,14 +245,12 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
           comentario: string | null;
         }> = [];
         
-        // ID que identifica materias extracurriculares
-        const EXTRACURRICULAR_TIPO_ID = 'f0e451cc-c9ee-4a3e-a982-d8345c18d108';
-        
         // Procesar las materias agrupadas
         for (const materiaData of materiasMap.values()) {
-          // Verificar si es extracurricular por tipoMateria (nombre) o tipoMateriaId
-          const isExtracurricular = materiaData.tipoMateria === 'EXTRACURRICULAR' || 
-                                   materiaData.tipoMateriaId === EXTRACURRICULAR_TIPO_ID;
+          // Verificar si es extracurricular por el campo esExtraescolar del backend
+          const isExtracurricular = materiaData.esExtraescolar || false;
+          
+          console.log('🔍 PDF - Procesando materia:', materiaData.nombre, 'esExtraescolar:', isExtracurricular);
           
           if (isExtracurricular) {
             extracurriculares.push({
@@ -274,13 +278,47 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
         }
 
         // 5. Crear estructura final de datos para el PDF
+        // Combinar extracurriculares de ambas fuentes: getHabitGrades y getByStudent
+        // Priorizar evaluaciones de hábitos sobre calificaciones académicas cuando ambas existen
+        const extracurricularesCombinadas = [
+          ...habitData.extracurriculares_valorativas, // De getHabitGrades (funciona bien)
+          ...extracurriculares // De getByStudent (como respaldo)
+        ];
+
+        // Crear mapa de extracurriculares por nombre para priorizar
+        const extracurricularesMap = new Map<string, any>();
+        
+        // Primero agregar evaluaciones de hábitos (prioridad alta)
+        habitData.extracurriculares_valorativas.forEach(extracurricular => {
+          extracurricularesMap.set(extracurricular.nombre, {
+            ...extracurricular,
+            fuente: 'habitGrades'
+          });
+        });
+        
+        // Luego agregar calificaciones académicas (prioridad baja - solo si no existe)
+        extracurriculares.forEach(extracurricular => {
+          if (!extracurricularesMap.has(extracurricular.nombre)) {
+            extracurricularesMap.set(extracurricular.nombre, {
+              ...extracurricular,
+              fuente: 'getByStudent'
+            });
+          }
+        });
+
+        // Convertir a array y eliminar duplicados por nombre (manteniendo prioridad de habitGrades)
+        const extracurricularesUnicas = Array.from(extracurricularesMap.values());
+
         const transformedData = {
           estudiante: {
             ...estudiante,
             seccion: estudiante.seccion || 'A'
           },
           materias: materiasRegulares,
-          habitos: habitData, // Usar habitData que ya contiene las extracurriculares del backend
+          habitos: {
+            ...habitData,
+            extracurriculares_valorativas: extracurricularesUnicas // Usar las extracurriculares combinadas y únicas
+          },
           promedios,
           periodo
         };

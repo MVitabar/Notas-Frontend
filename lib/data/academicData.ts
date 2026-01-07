@@ -219,7 +219,7 @@ export const extracurricularSubjects = {
   'Preparatoria A': [],
   'Preparatoria B': [],
   
-  // Primaria Baja
+  // Primaria Baja (1°-3°)
   '1° Primaria A': [
     "Comprensión de Lectura", "Lógica Matemática"
   ],
@@ -239,7 +239,7 @@ export const extracurricularSubjects = {
     "Comprensión de Lectura", "Lógica Matemática"
   ],
   
-  // Primaria Alta
+  // Primaria Alta (4°-6°)
   '4° Primaria A': [
     "Comprensión de Lectura", "Lógica Matemática"
   ],
@@ -259,7 +259,7 @@ export const extracurricularSubjects = {
     "Comprensión de Lectura", "Lógica Matemática"
   ],
   
-  // Básicos
+  // Básicos (1°-3°)
   '1° Básico A': [
     "Moral Cristiana", "Programa de Lectura"
   ],
@@ -288,23 +288,21 @@ export const extracurricularSubjects = {
     "Moral Cristiana", "Programa de Lectura"
   ],
   
-  // Bachillerato en Ciencias y Letras
+  // Diversificado (4°-6°)
   '4° Bachillerato en Ciencias y Letras': [
-    "RAZONAMIENTO VERBAL", "PROGRAMA DE LECTURA", "MORAL CRISTIANA"
+    "Razonamiento Verbal", "Programa de Lectura", "Moral Cristiana"
   ],
   '5° Bachillerato en Ciencias y Letras': [
-    "RAZONAMIENTO VERBAL", "PROGRAMA DE LECTURA", "MORAL CRISTIANA"
+    "Razonamiento Verbal", "Programa de Lectura", "Moral Cristiana"
   ],
-  
-  // Perito Contador
   '4° Perito Contador': [
-    "PROGRAMA DE LECTURA", "MORAL CRISTIANA"
+    "Programa de Lectura", "Moral Cristiana"
   ],
   '5° Perito Contador': [
-    "PROGRAMA DE LECTURA", "MORAL CRISTIANA"
+    "Programa de Lectura", "Moral Cristiana"
   ],
   '6° Perito Contador': [
-    "PROGRAMA DE LECTURA", "MORAL CRISTIANA"
+    "Programa de Lectura", "Moral Cristiana"
   ]
 };
 
