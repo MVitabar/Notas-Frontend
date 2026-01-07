@@ -128,6 +128,7 @@ export default function AdminGradesPage() {
     comentario: "",
   })
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingHabitGrades, setEditingHabitGrades] = useState<Record<string, any>>({})
   const [habitEvaluationsGrades, setHabitEvaluationsGrades] = useState<Record<string, { id: string; valor: ValorConceptual; evaluacionHabitoId: string }>>({})
   const [extraescolarHabitGrades, setExtraescolarHabitGrades] = useState<Record<string, { id: string; valor: ValorConceptual; evaluacionHabitoId: string }>>({})
 
@@ -236,6 +237,66 @@ export default function AdminGradesPage() {
     })))
   }
 
+  // Función para manejar cambios en hábitos
+  const handleHabitChange = (habitId: string, unidad: string, value: string) => {
+    const currentValue = editingHabitGrades[habitId] || {}
+    
+    setEditingHabitGrades({
+      ...editingHabitGrades,
+      [habitId]: {
+        ...currentValue,
+        [unidad]: value
+      }
+    })
+  }
+
+  // Función para guardar hábitos
+  const handleSaveHabitGrades = async () => {
+    try {
+      console.log('🔍 handleSaveHabitGrades - Guardando hábitos')
+      console.log('🔍 handleSaveHabitGrades - editingHabitGrades:', editingHabitGrades)
+      
+      const studentId = selectedStudent?.id
+      const periodoId = currentPeriod?.id
+      
+      if (!studentId || !periodoId) {
+        toast.error('Faltan datos del estudiante o período')
+        return
+      }
+
+      // Preparar datos para guardar
+      const calificaciones = Object.entries(editingHabitGrades).map(([habitId, data]) => {
+        console.log('🔍 Procesando hábito:', { habitId, data })
+        return {
+          evaluacionHabitoId: habitId,
+          u1: data.u1 || null,
+          u2: data.u2 || null,
+          u3: data.u3 || null,
+          u4: data.u4 || null,
+          comentario: data.comentario || ''
+        }
+      })
+
+      console.log('🔍 handleSaveHabitGrades - Calificaciones a enviar:', calificaciones)
+
+      await gradeService.saveHabitGrades(studentId, {
+        periodoId,
+        calificaciones
+      })
+      
+      // Limpiar el estado de edición
+      setEditingHabitGrades({})
+      
+      // Recargar los hábitos para mostrar los cambios
+      await loadStudentGrades(studentId, periodoId)
+      
+      toast.success('Hábitos guardados correctamente')
+    } catch (error) {
+      console.error('🔍 handleSaveHabitGrades - Error al guardar hábitos:', error)
+      toast.error('Error al guardar los hábitos')
+    }
+  }
+
   // Función para guardar las calificaciones
   const handleSaveGrades = async (materiaId: string, materiaData: any) => {
     try {
@@ -261,17 +322,24 @@ export default function AdminGradesPage() {
           
           if (existingGrade) {
             // Actualizar calificación existente
-            await gradeService.update(existingGrade.id, {
+            const updateData: any = {
               tipoCalificacion: existingGrade.tipoCalificacion,
               tipoEvaluacion: existingGrade.tipoEvaluacion,
-              calificacion: newValue,
-              valorConceptual: existingGrade.valorConceptual,
-              comentario: existingGrade.comentario,
               materiaId: existingGrade.materiaId,
               periodoId: existingGrade.periodoId,
               unidad: unidad,
               esExtraescolar: materiaData.esExtraescolar || false
-            })
+            };
+
+            // Para extracurriculares, usar valorConceptual
+            if (materiaData.esExtraescolar) {
+              updateData.valorConceptual = newValue;
+            } else {
+              // Para materias regulares, usar calificación numérica
+              updateData.calificacion = parseFloat(newValue) || 0;
+            }
+
+            await gradeService.update(existingGrade.id, updateData)
           } else {
             // No crear nuevas calificaciones - solo editar existentes
             console.log(`🔍 No existe calificación para unidad ${unidad} - omitiendo creación`)
@@ -570,7 +638,7 @@ export default function AdminGradesPage() {
                         filteredStudents.map((estudiante) => {
                           const grade = getCurrentGrade(estudiante)
                           const gradoInfo = estudiante.grados?.[0] || 'N/A'
-
+                          
                           return (
                             <TableRow key={estudiante.id}>
                               <TableCell className="font-medium">
@@ -994,165 +1062,13 @@ export default function AdminGradesPage() {
                               </TableBody>
                             </Table>
                           </div>      
-                          {/* Sección de Extracurriculares - Similar al PDF */}
-                          {(() => {
-                            // Obtener las materias extracurriculares del mismo procesamiento anterior
-                            const extracurricularesMap = new Map<string, any>();
-                            
-                            for (const grade of grades) {
-                              const materia = grade.materia || {};
-                              const materiaId = materia.id || 'unknown';
-                              
-                              const calificacionValor = grade.calificacion || 0;
-                              const unidad = grade.unidad || 'u1';
-                              
-                              // Si la materia no existe en el mapa, crearla
-                              if (!extracurricularesMap.has(materiaId)) {
-                                const materiaData = {
-                                  id: materiaId,
-                                  nombre: materia.nombre || 'Materia sin nombre',
-                                  tipoMateria: (materia as any).tipoMateria || 'Sin tipo',
-                                  tipoMateriaId: (materia as any).tipoMateriaId,
-                                  esExtraescolar: grade.esExtraescolar || false,
-                                  u1: 0,
-                                  u2: 0,
-                                  u3: 0,
-                                  u4: 0,
-                                  final: 0,
-                                  grades: []
-                                };
-                                extracurricularesMap.set(materiaId, materiaData);
-                              }
-                              
-                              // Obtener la materia existente y actualizar la unidad correspondiente
-                              const materiaExistente = extracurricularesMap.get(materiaId);
-                              
-                              // Asignar la calificación a la unidad correspondiente
-                              if (unidad === 'u1') {
-                                materiaExistente.u1 = calificacionValor;
-                              } else if (unidad === 'u2') {
-                                materiaExistente.u2 = calificacionValor;
-                              } else if (unidad === 'u3') {
-                                materiaExistente.u3 = calificacionValor;
-                              } else if (unidad === 'u4') {
-                                materiaExistente.u4 = calificacionValor;
-                              }
-                              
-                              materiaExistente.grades.push(grade);
-                            }
-                            
-                            // Extraer solo las materias extracurriculares
-                            const materiasExtracurriculares: Array<{
-                              id: string;
-                              nombre: string;
-                              u1: number | null;
-                              u2: number | null;
-                              u3: number | null;
-                              u4: number | null;
-                              comentario: string | null;
-                              grades: any[];
-                            }> = [];
-                            
-                            for (const materiaData of extracurricularesMap.values()) {
-                              const isExtracurricular = materiaData.esExtraescolar || false;
-                              
-                              if (isExtracurricular) {
-                                materiasExtracurriculares.push({
-                                  id: materiaData.id,
-                                  nombre: materiaData.nombre,
-                                  u1: typeof materiaData.u1 === 'number' && materiaData.u1 > 0 ? materiaData.u1 : null,
-                                  u2: typeof materiaData.u2 === 'number' && materiaData.u2 > 0 ? materiaData.u2 : null,
-                                  u3: typeof materiaData.u3 === 'number' && materiaData.u3 > 0 ? materiaData.u3 : null,
-                                  u4: typeof materiaData.u4 === 'number' && materiaData.u4 > 0 ? materiaData.u4 : null,
-                                  comentario: null,
-                                  grades: materiaData.grades
-                                });
-                              }
-                            }
-                            
-                            return materiasExtracurriculares.length > 0 && (
-                              <div className="mt-6">
-                                <div className="bg-green-50 p-4 rounded-lg mb-4">
-                                  <h4 className="font-semibold text-green-800 mb-2">
-                                    Áreas Extracurriculares
-                                  </h4>
-                                  <p className="text-sm text-green-600">
-                                    Materias extracurriculares del estudiante
-                                  </p>
-                                </div>
-                                
-                                <div className="border rounded-lg overflow-hidden">
-                                  <Table>
-                                    <TableHeader>
-                                      <TableRow>
-                                        <TableHead className="bg-green-50">Áreas Extracurriculares</TableHead>
-                                        <TableHead className="bg-green-50">I UNIDAD</TableHead>
-                                        <TableHead className="bg-green-50">II UNIDAD</TableHead>
-                                        <TableHead className="bg-green-50">III UNIDAD</TableHead>
-                                        <TableHead className="bg-green-50">IV UNIDAD</TableHead>
-                                        <TableHead className="bg-green-50">Acciones</TableHead>
-                                      </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                      {materiasExtracurriculares.map((extracurricular: any, index: number) => (
-                                        <TableRow key={`extra-${index}`}>
-                                          <TableCell className="font-medium">
-                                            {extracurricular.nombre}
-                                          </TableCell>
-                                          <TableCell className="text-center">
-                                            <Input
-                                              type="number"
-                                              value={editingGrades.get(extracurricular.id)?.u1 ?? extracurricular.u1 ?? ''}
-                                              onChange={(e) => handleGradeChange(extracurricular.id, 'u1', e.target.value)}
-                                              className="w-20 text-center"
-                                              placeholder="0"
-                                            />
-                                          </TableCell>
-                                          <TableCell className="text-center">
-                                            <Input
-                                              type="number"
-                                              value={editingGrades.get(extracurricular.id)?.u2 ?? extracurricular.u2 ?? ''}
-                                              onChange={(e) => handleGradeChange(extracurricular.id, 'u2', e.target.value)}
-                                              className="w-20 text-center"
-                                              placeholder="0"
-                                            />
-                                          </TableCell>
-                                          <TableCell className="text-center">
-                                            <Input
-                                              type="number"
-                                              value={editingGrades.get(extracurricular.id)?.u3 ?? extracurricular.u3 ?? ''}
-                                              onChange={(e) => handleGradeChange(extracurricular.id, 'u3', e.target.value)}
-                                              className="w-20 text-center"
-                                              placeholder="0"
-                                            />
-                                          </TableCell>
-                                          <TableCell className="text-center">
-                                            <Input
-                                              type="number"
-                                              value={editingGrades.get(extracurricular.id)?.u4 ?? extracurricular.u4 ?? ''}
-                                              onChange={(e) => handleGradeChange(extracurricular.id, 'u4', e.target.value)}
-                                              className="w-20 text-center"
-                                              placeholder="0"
-                                            />
-                                          </TableCell>
-                                          <TableCell className="text-center">
-                                            <Button
-                                              size="sm"
-                                              onClick={() => handleSaveGrades(extracurricular.id, extracurricular)}
-                                              className="bg-green-600 hover:bg-green-700"
-                                            >
-                                              Guardar
-                                            </Button>
-                                          </TableCell>
-                                        </TableRow>
-                                      ))}
-                                    </TableBody>
-                                  </Table>
-                                </div>
-                              </div>
-                            );
-                          })()}
-                          </>
+                          {/* Mensaje si no hay calificaciones académicas */}
+                          {grades.length === 0 && (
+                            <div className="text-center py-8">
+                              <p className="text-gray-500">No hay calificaciones académicas registradas para este estudiante</p>
+                            </div>
+                          )}
+                        </>
                       ) : (
                         <div className="text-center py-8">
                           <p className="text-gray-500">No hay calificaciones académicas registradas para este estudiante</p>
@@ -1178,8 +1094,130 @@ export default function AdminGradesPage() {
                           <span className="ml-2">Cargando evaluaciones...</span>
                         </div>
                       ) : (
-                        <div className="text-center py-8">
-                          <p className="text-gray-500">La gestión de hábitos estará disponible próximamente para administradores</p>
+                        <div className="space-y-6">
+                          {/* Sección de Extracurriculares (tipo EXTRACURRICULAR) */}
+                          {(() => {
+                            const extracurriculares = habitGrades.filter((h: any) => h.tipo === 'EXTRACURRICULAR');
+                            
+                            console.log('🔍 Hábitos - Extracurriculares encontradas:', extracurriculares.length);
+                            
+                            return extracurriculares.length > 0 ? (
+                              <div className="bg-green-50 p-4 rounded-lg">
+                                <h5 className="font-semibold text-green-800 mb-4">
+                                  Áreas Extracurriculares
+                                </h5>
+                                <div className="space-y-4">
+                                  {extracurriculares.map((habit: any) => {
+                                    const habitKey = habit.evaluacionHabitoId || habit.id;
+                                    return (
+                                    <div key={habit.id} className="bg-white p-4 rounded-lg border">
+                                      <h6 className="font-medium text-green-700 mb-3">
+                                        {habit.nombre || 'Hábito sin nombre'}
+                                      </h6>
+                                      
+                                      <div className="grid grid-cols-4 gap-4 mb-4">
+                                        {['u1', 'u2', 'u3', 'u4'].map((unidad) => (
+                                          <div key={unidad} className="space-y-2">
+                                            <Label className="text-sm font-medium">
+                                              {unidad.toUpperCase()}
+                                            </Label>
+                                            <Select
+                                              value={editingHabitGrades[habitKey]?.[unidad] || habit[unidad] || ''}
+                                              onValueChange={(value) => handleHabitChange(habitKey, unidad, value)}
+                                            >
+                                              <SelectTrigger className="w-full">
+                                                <SelectValue placeholder="Seleccionar" />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="DESTACA">DESTACA</SelectItem>
+                                                <SelectItem value="AVANZA">AVANZA</SelectItem>
+                                                <SelectItem value="NECESITA_MEJORAR">NECESITA MEJORAR</SelectItem>
+                                                <SelectItem value="INSATISFACTORIO">INSATISFACTORIO</SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      
+                                      <div className="space-y-2">
+                                        <Label className="text-sm font-medium">Comentario</Label>
+                                        <Input
+                                          value={editingHabitGrades[habitKey]?.comentario || habit.comentario || ''}
+                                          onChange={(e) => handleHabitChange(habitKey, 'comentario', e.target.value)}
+                                          placeholder="Agregar comentario..."
+                                          className="w-full"
+                                        />
+                                      </div>
+                                    </div>
+                                    );
+                                  })}
+                                </div>
+                                
+                                <div className="mt-4 flex justify-end">
+                                  <Button
+                                    onClick={handleSaveHabitGrades}
+                                    className="bg-green-600 hover:bg-green-700"
+                                  >
+                                    Guardar Extracurriculares
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="bg-gray-50 p-4 rounded-lg">
+                                <p className="text-gray-600">
+                                  No hay evaluaciones extracurriculares registradas para este estudiante
+                                </p>
+                              </div>
+                            )}
+                          )()}
+                          
+                          {/* Otras categorías de hábitos */}
+                          {['CASA', 'APRENDIZAJE', 'COMPORTAMIENTO'].map((tipo) => {
+                            const habitosTipo = habitGrades.filter((h: any) => h.tipo === tipo);
+                            
+                            if (habitosTipo.length === 0) return null;
+                            
+                            return (
+                              <div key={tipo} className="bg-blue-50 p-4 rounded-lg">
+                                <h5 className="font-semibold text-blue-800 mb-4">
+                                  {tipo === 'CASA' ? 'Hábitos en Casa' : 
+                                   tipo === 'APRENDIZAJE' ? 'Responsabilidad en el Aprendizaje' : 
+                                   'Responsabilidad y Comportamiento'}
+                                </h5>
+                                <div className="space-y-4">
+                                  {habitosTipo.map((habit: any) => {
+                                    const habitKey = habit.evaluacionHabitoId || habit.id;
+                                    return (
+                                    <div key={habit.id} className="bg-white p-3 rounded-lg border">
+                                      <h6 className="font-medium text-blue-700 mb-2">
+                                        {habit.nombre || 'Hábito sin nombre'}
+                                      </h6>
+                                      
+                                      <div className="grid grid-cols-4 gap-2">
+                                        {['u1', 'u2', 'u3', 'u4'].map((unidad) => (
+                                          <div key={unidad} className="text-center">
+                                            <div className="text-xs font-medium text-gray-600 mb-1">
+                                              {unidad.toUpperCase()}
+                                            </div>
+                                            <div className="text-sm">
+                                              {habit[unidad] || '-'}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      
+                                      {habit.comentario && (
+                                        <div className="mt-2 text-sm text-gray-600">
+                                          <strong>Comentario:</strong> {habit.comentario}
+                                        </div>
+                                      )}
+                                    </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </TabsContent>
