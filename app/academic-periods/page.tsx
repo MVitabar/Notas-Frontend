@@ -125,10 +125,10 @@ export default function AcademicPeriodsPage() {
       return;
     }
     
-    // Ensure isCurrent is a boolean
+    // Sincronizar isCurrent con el status
     const dataToSubmit = {
       ...formData,
-      isCurrent: formData.isCurrent || false,
+      isCurrent: formData.status === 'active',
     };
     
     createMutation.mutate(dataToSubmit);
@@ -147,7 +147,7 @@ export default function AcademicPeriodsPage() {
         id: selectedPeriod.id, 
         data: {
           ...formData,
-          isCurrent: formData.isCurrent || false,
+          isCurrent: formData.status === 'active', // Sincronizar con el status
           startDate: formData.startDate ? new Date(formData.startDate).toISOString() : undefined,
           endDate: formData.endDate ? new Date(formData.endDate).toISOString() : undefined,
         } 
@@ -163,18 +163,6 @@ export default function AcademicPeriodsPage() {
   const handleDeletePeriod = (id: string) => {
     if (confirm("¿Estás seguro de que deseas eliminar este período académico?")) {
       deleteMutation.mutate(id);
-    }
-  };
-
-  // Función para manejar la activación de un período
-  const handleActivatePeriod = async (id: string) => {
-    try {
-      await academicPeriodService.activatePeriod(id);
-      queryClient.invalidateQueries({ queryKey: ['academicPeriods', 'currentAcademicPeriod'] });
-      toast.success("Período activado correctamente");
-    } catch (error) {
-      toast.error("Error al activar el período");
-      console.error(error);
     }
   };
 
@@ -324,7 +312,11 @@ export default function AcademicPeriodsPage() {
                     <Select
                       value={formData.status}
                       onValueChange={(value: StatusType) =>
-                        setFormData({ ...formData, status: value })
+                        setFormData({ 
+                          ...formData, 
+                          status: value,
+                          isCurrent: value === 'active' // Sincronizar automáticamente
+                        })
                       }
                     >
                       <SelectTrigger>
@@ -472,15 +464,6 @@ export default function AcademicPeriodsPage() {
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
-                        {period.status === 'upcoming' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleActivatePeriod(period.id)}
-                          >
-                            <CheckCircle className="h-4 w-4" />
-                          </Button>
-                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -530,7 +513,11 @@ export default function AcademicPeriodsPage() {
               <Select
                 value={formData.status}
                 onValueChange={(value: StatusType) =>
-                  setFormData({ ...formData, status: value })
+                  setFormData({ 
+                    ...formData, 
+                    status: value,
+                    isCurrent: value === 'active' // Sincronizar automáticamente
+                  })
                 }
               >
                 <SelectTrigger>

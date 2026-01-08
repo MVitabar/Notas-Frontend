@@ -120,32 +120,13 @@ export const academicPeriodService = {
   },
 
   /**
-   * Marca un período como activo
+   * Marca un período como activo (simplificado)
    */
   async activatePeriod(id: string): Promise<AcademicPeriod> {
     try {
-      // First, deactivate all other current periods
-      const periods = await this.getAllPeriods();
-      await Promise.all(
-        periods
-          .filter(p => p.id !== id && p.isCurrent)
-          .map(p => this.updatePeriod(p.id, { 
-            status: 'cancelled', 
-            isCurrent: false 
-          }))
-      );
-      
-      // Then activate the selected period
-      const updatedPeriod = await this.updatePeriod(id, { 
-        status: 'active', 
-        isCurrent: true 
-      });
-      
-      if (!updatedPeriod) {
-        throw new Error('No se pudo activar el período');
-      }
-      
-      return updatedPeriod;
+      // El backend manejará la lógica de desactivar otros períodos
+      const response = await api.post<AcademicPeriod>(`/academic-periods/${id}/activate`);
+      return response.data;
     } catch (error) {
       console.error(`Error al activar el período con ID ${id}:`, error);
       throw error;
