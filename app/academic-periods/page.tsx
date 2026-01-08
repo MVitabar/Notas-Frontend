@@ -64,13 +64,12 @@ export default function AcademicPeriodsPage() {
   const createMutation = useMutation({
     mutationFn: (data: AcademicPeriodFormData) => academicPeriodService.createPeriod({
       ...data,
-      isCurrent: data.isCurrent || false,
+      isCurrent: data.status === 'active', // Sincronizar con el status
       startDate: data.startDate ? new Date(data.startDate).toISOString() : new Date().toISOString(),
       endDate: data.endDate ? new Date(data.endDate).toISOString() : new Date().toISOString(),
     }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['academicPeriods'] });
-      queryClient.invalidateQueries({ queryKey: ['currentAcademicPeriod'] });
+      queryClient.invalidateQueries({ queryKey: ['academicPeriods', 'currentAcademicPeriod'] });
       toast.success("Período académico creado correctamente");
       setIsCreateDialogOpen(false);
       setFormData({
@@ -109,7 +108,7 @@ export default function AcademicPeriodsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => academicPeriodService.deletePeriod(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['academicPeriods'] });
+      queryClient.invalidateQueries({ queryKey: ['academicPeriods', 'currentAcademicPeriod'] });
       toast.success("Período académico eliminado correctamente");
     },
     onError: (error) => {
