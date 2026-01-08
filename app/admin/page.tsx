@@ -278,6 +278,7 @@ export default function AdminDashboard() {
               <TabsTrigger value="students">Estudiantes</TabsTrigger>
               <TabsTrigger value="grades">Calificaciones</TabsTrigger>
               <TabsTrigger value="reports">Reportes</TabsTrigger>
+              
             </TabsList>
 
             <TabsContent value="overview" className="space-y-6">
