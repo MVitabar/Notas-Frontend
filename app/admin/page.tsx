@@ -263,7 +263,7 @@ export default function AdminDashboard() {
             </Card>
           </div>
 
-          <Tabs defaultValue="overview" className="space-y-6">
+          <Tabs defaultValue="overview" className="space-between">
             {isLoading && (
               <div className="fixed inset-0 bg-black/10 flex items-center justify-center z-50">
                 <div className="bg-white p-6 rounded-lg shadow-lg flex items-center gap-3">
@@ -272,12 +272,11 @@ export default function AdminDashboard() {
                 </div>
               </div>
             )}
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="overview">Resumen</TabsTrigger>
               <TabsTrigger value="teachers">Docentes</TabsTrigger>
               <TabsTrigger value="students">Estudiantes</TabsTrigger>
               <TabsTrigger value="grades">Calificaciones</TabsTrigger>
-              <TabsTrigger value="reports">Reportes</TabsTrigger>
               
             </TabsList>
 
@@ -302,12 +301,7 @@ export default function AdminDashboard() {
                         Inscribir Estudiante
                       </Button>
                     </Link>
-                    <Link href="/admin/reports">
-                      <Button variant="outline" className="w-full justify-start bg-transparent">
-                        <BarChart3 className="h-4 w-4 mr-2" />
-                        Generar Reportes
-                      </Button>
-                    </Link>
+                    
                     <Link href="/academic-periods">
                       <Button variant="outline" className="w-full justify-start bg-transparent">
                         <Calendar className="h-4 w-4 mr-2" />
@@ -392,20 +386,7 @@ export default function AdminDashboard() {
               </Link>
             </TabsContent>
 
-            <TabsContent value="reports">
-              <Link href="/admin/reports">
-                <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                  <CardHeader className="text-center">
-                    <BarChart3 className="h-12 w-12 text-orange-600 mx-auto mb-4" />
-                    <CardTitle>Reportes y Estadísticas</CardTitle>
-                    <CardDescription>Generar reportes administrativos y estadísticas</CardDescription>
-                  </CardHeader>
-                  <CardContent className="text-center">
-                    <Button size="lg">Ver Reportes</Button>
-                  </CardContent>
-                </Card>
-              </Link>
-            </TabsContent>
+            
           </Tabs>
         </div>
       </div>

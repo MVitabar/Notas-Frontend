@@ -129,17 +129,15 @@ export default function AdminGradesPage() {
   })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingHabitGrades, setEditingHabitGrades] = useState<Record<string, any>>({})
-  const [habitEvaluationsGrades, setHabitEvaluationsGrades] = useState<Record<string, { id: string; valor: ValorConceptual; evaluacionHabitoId: string }>>({})
+  const [habitEvaluationsGrades, setHabitEvaluationsGrades] = useState<Record<string, { 
+    id: string; 
+    valor: ValorConceptual; 
+    evaluacionHabitoId: string;
+    calificaciones?: Array<{ unidad: string; valor: ValorConceptual }>
+  }>>({})
   const [extraescolarHabitGrades, setExtraescolarHabitGrades] = useState<Record<string, { id: string; valor: ValorConceptual; evaluacionHabitoId: string }>>({})
 
-  const evaluationPeriods = [
-    { id: "PARCIAL_1", name: "Parcial 1" },
-    { id: "PARCIAL_2", name: "Parcial 2" },
-    { id: "PARCIAL_3", name: "Parcial 3" },
-    { id: "PARCIAL_4", name: "Parcial 4" },
-    { id: "EXAMEN_FINAL", name: "Examen Final" },
-    { id: "TRABAJO_FINAL", name: "Trabajo Final" }
-  ]
+  
 
   // Funciones auxiliares
   const getValorConceptualText = (valor: ValorConceptual) => {
@@ -265,14 +263,30 @@ export default function AdminGradesPage() {
       }
 
       // Preparar datos para guardar
+      console.log('🔍 handleSaveHabitGrades - habitEvaluationsGrades:', habitEvaluationsGrades)
+      
       const calificaciones = Object.entries(editingHabitGrades).map(([habitId, data]) => {
         console.log('🔍 Procesando hábito:', { habitId, data })
+        
+        // Buscar el hábito actual en habitGrades para obtener sus valores existentes
+        const currentHabit = habitGrades.find((h: any) => h.evaluacionHabitoId === habitId)
+        console.log('🔍 currentHabit encontrado:', currentHabit)
+        
+        // Buscar si ya existe una calificación en habitGrades (que ya incluye las calificaciones del estudiante)
+        const existingCalificacion = habitGrades.find((h: any) => 
+          h.evaluacionHabitoId === habitId && 
+          h.u1 !== null || h.u2 !== null || h.u3 !== null || h.u4 !== null
+        )
+        console.log('🔍 existingCalificacion encontrada:', existingCalificacion)
+        
         return {
+          key: habitId, // Agregar key para React
           evaluacionHabitoId: habitId,
-          u1: data.u1 || null,
-          u2: data.u2 || null,
-          u3: data.u3 || null,
-          u4: data.u4 || null,
+          // Obtener todas las unidades que se están editando
+          u1: data.u1 !== undefined ? data.u1 : (currentHabit?.u1 || null),
+          u2: data.u2 !== undefined ? data.u2 : (currentHabit?.u2 || null),
+          u3: data.u3 !== undefined ? data.u3 : (currentHabit?.u3 || null),
+          u4: data.u4 !== undefined ? data.u4 : (currentHabit?.u4 || null),
           comentario: data.comentario || ''
         }
       })
@@ -328,16 +342,10 @@ export default function AdminGradesPage() {
               materiaId: existingGrade.materiaId,
               periodoId: existingGrade.periodoId,
               unidad: unidad,
-              esExtraescolar: materiaData.esExtraescolar || false
+              esExtraescolar: materiaData.esExtraescolar || false,
+              valorConceptual: newValue,
+              calificacion: parseFloat(newValue) || 0,
             };
-
-            // Para extracurriculares, usar valorConceptual
-            if (materiaData.esExtraescolar) {
-              updateData.valorConceptual = newValue;
-            } else {
-              // Para materias regulares, usar calificación numérica
-              updateData.calificacion = parseFloat(newValue) || 0;
-            }
 
             await gradeService.update(existingGrade.id, updateData)
           } else {
@@ -565,27 +573,7 @@ export default function AdminGradesPage() {
                 </Select>
               </div>
 
-              <div>
-                <h3 className="font-medium mb-2">Bimestre</h3>
-                <Select value={selectedBimester} onValueChange={setSelectedBimester}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un bimestre" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bimestres.length > 0 ? (
-                      bimestres.map((bimestre) => (
-                        <SelectItem key={bimestre.id} value={bimestre.numero.toString()}>
-                          {bimestre.nombre}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <div className="p-2 text-sm text-gray-500 text-center">
-                        No hay bimestres disponibles
-                      </div>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
+              
             </div>
 
             {isLoadingStudents ? (
@@ -625,7 +613,7 @@ export default function AdminGradesPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Estudiante</TableHead>
-                        <TableHead>DNI</TableHead>
+                        <TableHead>DPI</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Grado/Sección</TableHead>
                         <TableHead>Estado</TableHead>
@@ -688,6 +676,7 @@ export default function AdminGradesPage() {
                                       <Pencil className="h-4 w-4" />
                                     </Button>
                                     <DownloadGradeReportButton 
+                                      key={`pdf-${estudiante.id}`}
                                       estudiante={{
                                           id: estudiante.id,
                                           nombre: estudiante.nombre || '',
@@ -965,6 +954,7 @@ export default function AdminGradesPage() {
                                           </TableCell>
                                           <TableCell className="text-center">
                                             <Input
+                                              key={`u1-${materia.id}`}
                                               type="number"
                                               value={editingGrades.get(materia.id)?.u1 ?? materia.u1 ?? ''}
                                               onChange={(e) => handleGradeChange(materia.id, 'u1', e.target.value)}
@@ -974,6 +964,7 @@ export default function AdminGradesPage() {
                                           </TableCell>
                                           <TableCell className="text-center">
                                             <Input
+                                              key={`u2-${materia.id}`}
                                               type="number"
                                               value={editingGrades.get(materia.id)?.u2 ?? materia.u2 ?? ''}
                                               onChange={(e) => handleGradeChange(materia.id, 'u2', e.target.value)}
@@ -983,6 +974,7 @@ export default function AdminGradesPage() {
                                           </TableCell>
                                           <TableCell className="text-center">
                                             <Input
+                                              key={`u3-${materia.id}`}
                                               type="number"
                                               value={editingGrades.get(materia.id)?.u3 ?? materia.u3 ?? ''}
                                               onChange={(e) => handleGradeChange(materia.id, 'u3', e.target.value)}
@@ -992,6 +984,7 @@ export default function AdminGradesPage() {
                                           </TableCell>
                                           <TableCell className="text-center">
                                             <Input
+                                              key={`u4-${materia.id}`}
                                               type="number"
                                               value={editingGrades.get(materia.id)?.u4 ?? materia.u4 ?? ''}
                                               onChange={(e) => handleGradeChange(materia.id, 'u4', e.target.value)}
@@ -1004,6 +997,7 @@ export default function AdminGradesPage() {
                                           </TableCell>
                                           <TableCell className="text-center">
                                             <Button
+                                              key={`save-${materia.id}`}
                                               size="sm"
                                               onClick={() => handleSaveGrades(materia.id, materia)}
                                               className="bg-blue-600 hover:bg-blue-700"
@@ -1097,9 +1091,187 @@ export default function AdminGradesPage() {
                         <div className="space-y-6">
                           {/* Sección de Extracurriculares (tipo EXTRACURRICULAR) */}
                           {(() => {
-                            const extracurriculares = habitGrades.filter((h: any) => h.tipo === 'EXTRACURRICULAR');
+                            // Filtrar extracurriculares usando múltiples criterios basados en los datos reales
+                            const extracurriculares = habitGrades.filter((h: any) => {
+                              // Criterio 1: esExtracurricular === true (más confiable según los datos)
+                              const esExtraPorFlag = h.esExtracurricular === true;
+                              
+                              // Criterio 2: tipoMateriaId específico de extracurriculares
+                              const esExtraPorTipoMateriaId = h.tipoMateriaId === '84324295-386d-4d43-9fdd-043ac7689b22';
+                              
+                              // Criterio 3: tipo === 'EXTRACURRICULAR' (si existe)
+                              const esExtraPorTipo = h.tipo === 'EXTRACURRICULAR';
+                              
+                              // Criterio 4: tipoMateriaNombre === 'EXTRACURRICULAR' (si existe)
+                              const esExtraPorTipoMateriaNombre = h.tipoMateriaNombre === 'EXTRACURRICULAR';
+                              
+                              // Criterio 5: Por nombre (fallback)
+                              const nombresExtra = [
+                                'comprensión de lectura',
+                                'lógica matemática', 
+                                'moral cristiana',
+                                'programa de lectura',
+                                'razonamiento verbal'
+                              ];
+                              const nombre = (h.nombre || '').toLowerCase();
+                              const esExtraPorNombre = nombresExtra.some(n => nombre.includes(n));
+                              
+                              // Criterio 6: Verificar que la materia esté disponible para el grado seleccionado
+                              let esValidaParaGrado = true; // Por defecto es válida si no hay grado seleccionado
+                              let debugGradoInfo = '';
+                              
+                              if (selectedGrade && h.grados) {
+                                // Construir el grado completo como está en la base de datos
+                                console.log(`🔍 Admin - Entrando en sección CON grados para ${h.nombre}:`, {
+                                  tieneGrados: !!h.grados,
+                                  grados: h.grados,
+                                  esExtracurricular: h.esExtracurricular
+                                });
+                                const { grado, nivel, seccion } = selectedGrade;
+                                const gradoCompleto = `${grado}° ${nivel} ${seccion}`.trim();
+                                const gradoSinSeccion = `${grado}° ${nivel}`.trim();
+                                const gradoBase = `${grado} ${nivel}`.trim();
+                                
+                                debugGradoInfo = `Grado: ${gradoCompleto} | SinSeccion: ${gradoSinSeccion} | Base: ${gradoBase}`;
+                                
+                                // Verificar todas las formas posibles
+                                const check1 = h.grados.includes(gradoCompleto);
+                                const check2 = h.grados.includes(gradoSinSeccion);
+                                const check3 = h.grados.includes(gradoBase);
+                                const check4 = h.grados.includes(`${grado}° PC`); // 👈 Agregar formato "4° PC"
+                                const check5 = h.grados.some((g: string) => 
+                                  g.includes(`${grado}°`) && g.includes(nivel)
+                                );
+                                
+                                esValidaParaGrado = check1 || check2 || check3 || check4 || check5;
+                                
+                                if (h.esExtracurricular === true) {
+                                  console.log(`🔍 Grado Check - ${h.nombre}:`, {
+                                    materiaGrados: h.grados,
+                                    gradoCompleto,
+                                    gradoSinSeccion,
+                                    gradoBase,
+                                    checks: { check1, check2, check3, check4, check5 },
+                                    resultado: esValidaParaGrado,
+                                    debugInfo: debugGradoInfo
+                                  });
+                                }
+                              } else if (selectedGrade && !h.grados) {
+                                // Si no tiene campo grados, usar el mismo filtrado por nombre que en el PDF
+                                console.log(`🔍 Admin - Entrando en sección SIN grados para ${h.nombre}:`, {
+                                  tieneGrados: !!h.grados,
+                                  grados: h.grados,
+                                  esExtracurricular: h.esExtracurricular,
+                                  selectedGrade
+                                });
+                                const { grado, nivel } = selectedGrade;
+                                const gradoEstudiante = `${grado}° ${nivel}`;
+                                
+                                const nombresPorGrado = {
+                                  '1° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+                                  '2° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+                                  '3° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+                                  '4° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+                                  '5° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+                                  '6° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+                                  '1° Básico': ['Moral Cristiana', 'Programa de Lectura'],
+                                  '2° Básico': ['Moral Cristiana', 'Programa de Lectura'],
+                                  '3° Básico': ['Moral Cristiana', 'Programa de Lectura'],
+                                  '4° PC': ['Moral Cristiana', 'Programa de Lectura'],
+                                  '5° PC': ['Moral Cristiana', 'Programa de Lectura'],
+                                  '6° PC': ['Moral Cristiana', 'Programa de Lectura'],
+                                  '4° Perito Contador': ['Moral Cristiana', 'Programa de Lectura'],
+                                  '5° Perito Contador': ['Moral Cristiana', 'Programa de Lectura'],
+                                  '6° Perito Contador': ['Moral Cristiana', 'Programa de Lectura'],
+                                  '4° Perito': ['Moral Cristiana', 'Programa de Lectura'],
+                                  '5° Perito': ['Moral Cristiana', 'Programa de Lectura'],
+                                  '6° Perito': ['Moral Cristiana', 'Programa de Lectura'],
+                                  '4° BCL': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+                                  '5° BCL': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+                                  '6° BCL': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+                                  // Agregar más formatos para Bachillerato
+                                  '4° Bachillerato': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+                                  '5° Bachillerato': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+                                  '6° Bachillerato': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+                                  '4° Bachillerato en Ciencias y Letras': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+                                  '5° Bachillerato en Ciencias y Letras': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+                                  '6° Bachillerato en Ciencias y Letras': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal']
+                                };
+                                
+                                // Construir formatos específicos según el tipo de grado
+                                let formatosParaBuscar = [gradoEstudiante];
+                                let nombresValidos: string[] = [];
+                                
+                                if (nivel.includes('Perito')) {
+                                  formatosParaBuscar = [
+                                    gradoEstudiante,
+                                    `${grado}° ${nivel}`, // "4° Perito Contador"
+                                    `${grado}° ${nivel.split(' ')[0]}`, // "4° Perito"
+                                    `${grado} PC`, // "4 PC"
+                                    `${grado}° PC`, // "4° PC" 👈 ESTE FALTABA
+                                    `${grado} Perito` // "4 Perito"
+                                  ];
+                                } else if (nivel.includes('Bachillerato') || nivel.includes('BCL') || nivel.includes('Ciencias') || nivel.includes('Letras')) {
+                                  formatosParaBuscar = [
+                                    gradoEstudiante,
+                                    `${grado}° BCL`, // "4° BCL"
+                                    `${grado} BCL`, // "4 BCL"
+                                    `${grado}° Bachillerato`, // "4° Bachillerato"
+                                    `${grado} Bachillerato`, // "4 Bachillerato"
+                                    `${grado}° Bachillerato en Ciencias y Letras`, // "4° Bachillerato en Ciencias y Letras"
+                                    `${grado} Bachillerato en Ciencias y Letras` // "4 Bachillerato en Ciencias y Letras"
+                                  ];
+                                } else if (nivel.includes('Básico')) {
+                                  formatosParaBuscar = [
+                                    gradoEstudiante,
+                                    `${grado}° ${nivel}`, // "1° Básico"
+                                    `${grado} Básico` // "1 Básico"
+                                  ];
+                                } else if (nivel.includes('Primaria')) {
+                                  formatosParaBuscar = [
+                                    gradoEstudiante,
+                                    `${grado}° ${nivel}`, // "4° Primaria"
+                                    `${grado} Primaria` // "4 Primaria"
+                                  ];
+                                }
+                                
+                                for (const formato of formatosParaBuscar) {
+                                  const encontrados = nombresPorGrado[formato as keyof typeof nombresPorGrado] || [];
+                                  if (encontrados.length > 0) {
+                                    nombresValidos = encontrados;
+                                    break;
+                                  }
+                                }
+                                
+                                esValidaParaGrado = nombresValidos.includes(h.nombre);
+                                
+                                console.log(`🔍 Admin - Filtrado por nombre ${h.nombre}:`, {
+                                  gradoEstudiante,
+                                  formatosParaBuscar,
+                                  nombresValidos,
+                                  esValida: esValidaParaGrado
+                                });
+                              }
+                              
+                              const esExtra = esExtraPorFlag || esExtraPorTipoMateriaId || esExtraPorTipo || esExtraPorTipoMateriaNombre || esExtraPorNombre;
+                              
+                              // Solo incluir si es extracurricular Y es válida para el grado seleccionado
+                              return esExtra && (!selectedGrade || esValidaParaGrado);
+                            });
                             
+                            console.log('🔍 Hábitos - Total habitGrades:', habitGrades.length);
+                            console.log('🔍 Hábitos - Grado seleccionado:', selectedGrade);
                             console.log('🔍 Hábitos - Extracurriculares encontradas:', extracurriculares.length);
+                            console.log('🔍 Hábitos - Todos los tipos:', [...new Set(habitGrades.map((h: any) => h.tipo))]);
+                            console.log('🔍 Hábitos - esExtracurricular flags:', habitGrades.filter((h: any) => h.esExtracurricular === true).map((h: any) => ({nombre: h.nombre, grados: h.grados})));
+                            console.log('🔍 Hábitos - Nombres de extracurriculares:', extracurriculares.map((h: any) => h.nombre));
+                            console.log('🔍 Hábitos - Datos completos de extracurriculares:', habitGrades.filter((h: any) => h.esExtracurricular === true).map((h: any) => ({
+                              nombre: h.nombre,
+                              esExtracurricular: h.esExtracurricular,
+                              tipoMateriaId: h.tipoMateriaId,
+                              grados: h.grados,
+                              tipo: h.tipo
+                            })));
                             
                             return extracurriculares.length > 0 ? (
                               <div className="bg-green-50 p-4 rounded-lg">
@@ -1110,7 +1282,7 @@ export default function AdminGradesPage() {
                                   {extracurriculares.map((habit: any) => {
                                     const habitKey = habit.evaluacionHabitoId || habit.id;
                                     return (
-                                    <div key={habit.id} className="bg-white p-4 rounded-lg border">
+                                    <div key={habitKey} className="bg-white p-4 rounded-lg border">
                                       <h6 className="font-medium text-green-700 mb-3">
                                         {habit.nombre || 'Hábito sin nombre'}
                                       </h6>
@@ -1129,10 +1301,10 @@ export default function AdminGradesPage() {
                                                 <SelectValue placeholder="Seleccionar" />
                                               </SelectTrigger>
                                               <SelectContent>
-                                                <SelectItem value="DESTACA">DESTACA</SelectItem>
-                                                <SelectItem value="AVANZA">AVANZA</SelectItem>
-                                                <SelectItem value="NECESITA_MEJORAR">NECESITA MEJORAR</SelectItem>
-                                                <SelectItem value="INSATISFACTORIO">INSATISFACTORIO</SelectItem>
+                                                <SelectItem key="DESTACA" value="DESTACA">DESTACA</SelectItem>
+                                                <SelectItem key="AVANZA" value="AVANZA">AVANZA</SelectItem>
+                                                <SelectItem key="NECESITA_MEJORAR" value="NECESITA MEJORAR">NECESITA MEJORAR</SelectItem>
+                                                <SelectItem key="INSATISFACTORIO" value="INSATISFACTORIO">INSATISFACTORIO</SelectItem>
                                               </SelectContent>
                                             </Select>
                                           </div>
@@ -1188,7 +1360,7 @@ export default function AdminGradesPage() {
                                   {habitosTipo.map((habit: any) => {
                                     const habitKey = habit.evaluacionHabitoId || habit.id;
                                     return (
-                                    <div key={habit.id} className="bg-white p-3 rounded-lg border">
+                                    <div key={habitKey} className="bg-white p-3 rounded-lg border">
                                       <h6 className="font-medium text-blue-700 mb-2">
                                         {habit.nombre || 'Hábito sin nombre'}
                                       </h6>

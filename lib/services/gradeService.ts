@@ -204,6 +204,20 @@ export interface SaveHabitGradesRequest {
   calificaciones: HabitGradeRequest[];
 }
 
+// Función helper para detectar nombres extracurriculares
+function esNombreExtracurricular(nombre: string): boolean {
+  const extracurricularNames = [
+    'moral cristiana',
+    'comprensión de lectura',
+    'lógica matemática',
+    'programa de lectura',
+    'razonamiento verbal'
+  ];
+  return extracurricularNames.some(name => 
+    nombre.toLowerCase().includes(name)
+  );
+}
+
 const gradeService: IGradeService = {
   // Obtener calificaciones de un estudiante
   async getByStudent(estudianteId: string, periodoId?: string): Promise<CalificacionPorEstudiante[]> {
@@ -730,24 +744,69 @@ console.log('🔍 gradeService.getByStudent - URL completa:', fullUrl);
   // Guardar evaluaciones de hábitos
   async saveHabitGrades(estudianteId: string, data: SaveHabitGradesRequest): Promise<void> {
     try {
-      const response = await api.put(
-        `/calificaciones-habitos/estudiante/${estudianteId}`,
-        {
-          periodoId: data.periodoId,
-          calificaciones: data.calificaciones.map(habito => ({
-            evaluacionHabitoId: habito.evaluacionHabitoId,
-            u1: habito.u1 || null,
-            u2: habito.u2 || null,
-            u3: habito.u3 || null,
-            u4: habito.u4 || null,
-            comentario: habito.comentario || ''
-          }))
-        }
-      );
+      console.log('🔍 saveHabitGrades - Iniciando guardado:', {
+        estudianteId,
+        periodoId: data.periodoId,
+        totalCalificaciones: data.calificaciones.length
+      });
+      
+      console.log('🔍 saveHabitGrades - Datos a enviar:', JSON.stringify({
+        periodoId: data.periodoId,
+        calificaciones: data.calificaciones
+      }, null, 2));
+      
+      const url = `/calificaciones-habitos/estudiante/${estudianteId}`;
+      console.log('🔍 saveHabitGrades - URL:', url);
+      
+      const requestData = {
+        periodoId: data.periodoId,
+        calificaciones: data.calificaciones.map(habito => ({
+          evaluacionHabitoId: habito.evaluacionHabitoId,
+          u1: habito.u1 || null,
+          u2: habito.u2 || null,
+          u3: habito.u3 || null,
+          u4: habito.u4 || null,
+          comentario: habito.comentario || ''
+        }))
+      };
+      
+      console.log('🔍 saveHabitGrades - Request final:', JSON.stringify(requestData, null, 2));
+      
+      const response = await api.put(url, requestData);
+      
+      console.log('🔍 saveHabitGrades - Respuesta exitosa:', {
+        status: response.status,
+        statusText: response.statusText,
+        data: response.data
+      });
       
       return response.data;
-    } catch (error) {
-      console.error('Error al guardar evaluaciones de hábitos:', error);
+    } catch (error: any) {
+      console.error('🔍 saveHabitGrades - Error detallado:', {
+        error,
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        estudianteId,
+        periodoId: data.periodoId
+      });
+      
+      // Si es un error 404, podría ser que el endpoint no existe o el estudiante no tiene evaluaciones configuradas
+      if (error.response?.status === 404) {
+        console.warn('🔍 saveHabitGrades - Error 404: Posible problema con el endpoint o configuración');
+      }
+      
+      // Si es un error 400, podría ser un problema con los datos enviados
+      if (error.response?.status === 400) {
+        console.warn('🔍 saveHabitGrades - Error 400: Posible problema con los datos enviados');
+      }
+      
+      // Si es un error 401/403, problema de autenticación
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        console.warn('🔍 saveHabitGrades - Error de autenticación:', error.response?.status);
+      }
+      
       throw error;
     }
   },
@@ -769,6 +828,16 @@ console.log('🔍 gradeService.getByStudent - URL completa:', fullUrl);
         dataType: typeof response.data
       });
       
+      // Log adicional para ver la estructura cruda
+      console.log('🔍 getHabitGrades - Datos crudos recibidos:', JSON.stringify(response.data, null, 2));
+      
+      // Contar los tipos de datos recibidos
+      if (Array.isArray(response.data)) {
+        const tiposRecibidos = [...new Set(response.data.map((item: any) => item.tipo))];
+        console.log('🔍 getHabitGrades - Tipos recibidos:', tiposRecibidos);
+        console.log('🔍 getHabitGrades - EXTRACURRICULAR items recibidos:', response.data.filter((item: any) => item.tipo === 'EXTRACURRICULAR'));
+      }
+      
       if (!response.data) {
         console.log('🔍 getHabitGrades - No hay datos en respuesta, retornando array vacío');
         return [];
@@ -776,6 +845,147 @@ console.log('🔍 gradeService.getByStudent - URL completa:', fullUrl);
 
       // Si los datos vienen en un objeto con propiedad 'calificaciones'
       let habitData = Array.isArray(response.data) ? response.data : response.data.calificaciones || [];
+      
+      console.log('🔍 getHabitGrades - habitData inicial:', habitData.length, 'registros');
+      
+      // 🔥 IMPORTANTE: Verificar si faltan EXTRACURRICULAR y buscarlas en calificaciones regulares
+      const extracurricularInHabitData = habitData.filter((h: any) => h.tipo === 'EXTRACURRICULAR');
+      console.log('🔍 getHabitGrades - EXTRACURRICULAR en habitData:', extracurricularInHabitData.length);
+      
+      if (extracurricularInHabitData.length === 0) {
+        console.log('🔍 getHabitGrades - No se encontraron EXTRACURRICULAR en habitData, buscando en calificaciones regulares...');
+        
+        try {
+          // Buscar calificaciones extracurriculares en el endpoint regular
+          const regularGrades = await this.getByStudent(estudianteId, periodoId);
+          console.log('🔍 getHabitGrades - Calificaciones regulares obtenidas:', regularGrades.length);
+          
+          // Debug: mostrar todas las calificaciones para ver qué hay
+          console.log('🔍 getHabitGrades - Todas las calificaciones:', regularGrades.map(g => ({
+            nombre: g.materia?.nombre,
+            esExtraescolar: g.esExtraescolar,
+            unidad: g.unidad,
+            calificacion: g.calificacion
+          })));
+          
+          // Filtrar solo las que son extracurriculares
+          const extracurricularFromRegular = regularGrades.filter((grade: any) => {
+            const isExtra = grade.esExtraescolar === true || 
+                           esNombreExtracurricular(grade.materia?.nombre || '') ||
+                           grade.tipoMateriaId === '84324295-386d-4d43-9fdd-043ac7689b22'; // ID de tipo EXTRACURRICULAR
+            console.log('🔍 Evaluando calificación:', {
+              nombre: grade.materia?.nombre,
+              esExtraescolar: grade.esExtraescolar,
+              tipoMateriaId: grade.tipoMateriaId,
+              esNombreExtracurricular: esNombreExtracurricular(grade.materia?.nombre || ''),
+              resultado: isExtra
+            });
+            return isExtra;
+          });
+          
+          console.log('🔍 getHabitGrades - EXTRACURRICULAR encontradas en calificaciones regulares:', extracurricularFromRegular.length);
+          
+          // Convertir las calificaciones extracurriculares al formato de hábitos
+          const extracurricularAsHabits = extracurricularFromRegular.map((grade: any) => ({
+            evaluacionHabitoId: grade.id,
+            materiaId: grade.materiaId,
+            nombre: grade.materia?.nombre || 'Extracurricular sin nombre',
+            descripcion: `Evaluación de ${grade.materia?.nombre}`,
+            tipo: 'EXTRACURRICULAR',
+            u1: grade.unidad === 'u1' ? (grade.calificacion || null) : null,
+            u2: grade.unidad === 'u2' ? (grade.calificacion || null) : null,
+            u3: grade.unidad === 'u3' ? (grade.calificacion || null) : null,
+            u4: grade.unidad === 'u4' ? (grade.calificacion || null) : null,
+            comentario: grade.comentario || null,
+            createdAt: null, // No disponible en CalificacionPorEstudiante
+            updatedAt: null, // No disponible en CalificacionPorEstudiante
+            calificaciones: [], // Mantener compatibilidad
+            esMateria: false,
+            // Agregar campos adicionales para compatibilidad
+            esExtracurricular: true,
+            fuente: 'getByStudent'
+          }));
+          
+          console.log('🔍 getHabitGrades - EXTRACURRICULAR convertidas a formato hábitos:', extracurricularAsHabits);
+          
+          // Agregar las extracurriculares encontradas a habitData
+          habitData = [...habitData, ...extracurricularAsHabits];
+          console.log('🔍 getHabitGrades - habitData después de agregar calificaciones regulares:', habitData.length);
+          
+          // 🔥 NUEVO FALLBACK: Si todavía no hay EXTRACURRICULAR, buscar directamente en materias (como el dashboard)
+          if (extracurricularFromRegular.length === 0) {
+            console.log('🔍 getHabitGrades - Todavía no hay EXTRACURRICULAR, buscando en materias (como dashboard)...');
+            
+            try {
+              // Obtener todas las materias disponibles (mismo enfoque que dashboard)
+              const materiasResponse = await api.get('/materias/docente/mis-materias');
+              const todasLasMaterias = materiasResponse.data || [];
+              
+              console.log('🔍 getHabitGrades - Total materias disponibles:', todasLasMaterias.length);
+              
+              // IDs directos de la base de datos (mismo enfoque que dashboard)
+              const HOGAR_ID = "e133dce1-bb77-4b05-bdcb-0dc5d4c5df19";
+              const HABITO_ID = "16b47d65-2cb9-4c2e-8779-9e2f5576d896";
+              const EXTRACURRICULAR_ID = "d4965c36-c72a-43bb-8645-0e671df356c2";
+              
+              // Filtrar solo las materias extracurriculares (mismo filtro que dashboard)
+              const materiasExtracurriculares = todasLasMaterias.filter((materia: any) => {
+                const esExtracurricularPorTipo = materia.tipoMateriaId === EXTRACURRICULAR_ID;
+                const esExtracurricularPorFlag = materia.esExtracurricular === true;
+                const esExtracurricularPorNombre = esNombreExtracurricular(materia.nombre || '');
+                
+                const esExtra = esExtracurricularPorTipo || esExtracurricularPorFlag || esExtracurricularPorNombre;
+                
+                console.log('🔍 Evaluando materia:', {
+                  id: materia.id,
+                  nombre: materia.nombre,
+                  tipoMateriaId: materia.tipoMateriaId,
+                  esExtraescolar: materia.esExtraescolar,
+                  esExtracurricularPorTipo,
+                  esExtracurricularPorFlag,
+                  esExtracurricularPorNombre,
+                  resultado: esExtra
+                });
+                return esExtra;
+              });
+              
+              console.log('🔍 getHabitGrades - Materias extracurriculares encontradas:', materiasExtracurriculares.length);
+              
+              // Convertir las materias extracurriculares al formato de hábitos
+              const extracurricularFromMaterias = materiasExtracurriculares.map((materia: any) => ({
+                evaluacionHabitoId: materia.id,
+                materiaId: materia.materiaId || materia.id,
+                nombre: materia.nombre,
+                descripcion: materia.descripcion || `Evaluación de ${materia.nombre}`,
+                tipo: 'EXTRACURRICULAR', // Forzar el tipo a EXTRACURRICULAR
+                u1: null, // Sin calificación inicial
+                u2: null,
+                u3: null,
+                u4: null,
+                comentario: null,
+                createdAt: materia.createdAt,
+                updatedAt: materia.updatedAt,
+                calificaciones: [], // Mantener compatibilidad
+                esMateria: true,
+                esExtracurricular: true,
+                fuente: 'materias-docente'
+              }));
+              
+              console.log('🔍 getHabitGrades - EXTRACURRICULAR desde materias:', extracurricularFromMaterias);
+              
+              // Agregar las extracurriculares encontradas a habitData
+              habitData = [...habitData, ...extracurricularFromMaterias];
+              console.log('🔍 getHabitGrades - habitData final con EXTRACURRICULAR de materias:', habitData.length);
+              
+            } catch (error) {
+              console.warn('🔍 getHabitGrades - Error al buscar EXTRACURRICULAR en materias:', error);
+            }
+          }
+          
+        } catch (error) {
+          console.warn('🔍 getHabitGrades - Error al buscar EXTRACURRICULAR en calificaciones regulares:', error);
+        }
+      }
       
       // Obtener las tablas necesarias para enriquecer los datos
       
@@ -801,18 +1011,42 @@ console.log('🔍 gradeService.getByStudent - URL completa:', fullUrl);
       
       // Enriquecer los datos de hábitos con información completa
       habitData = habitData.map((habito: any) => {
-        const materiaInfo = habito.evaluacionHabitoId ? materiasMap.get(habito.evaluacionHabitoId) : null;
+        console.log('🔍 Procesando hábito:', {
+          evaluacionHabitoId: habito.evaluacionHabitoId,
+          nombre: habito.nombre,
+          tipo: habito.tipo,
+          materiaId: habito.materiaId
+        });
+        
+        const materiaInfo = habito.materiaId ? materiasMap.get(habito.materiaId) : null;
         const tipoMateriaId = materiaInfo?.tipoMateriaId || habito.tipoMateriaId || null;
         const tipoMateriaInfo = tipoMateriaId ? tiposMateriaMap.get(tipoMateriaId) : null;
         
+        console.log('🔍 Info encontrada:', {
+          materiaInfo,
+          tipoMateriaId,
+          tipoMateriaInfo
+        });
+        
         if (!materiaInfo) {
-          // Continuar sin información de materia
+          console.log('🔍 No se encontró información de materia para el hábito:', habito.nombre);
         }
         
         // Determinar si es extracurricular basado en múltiples fuentes
         const esExtracurricular = tipoMateriaInfo?.nombre === 'EXTRACURRICULAR' || 
                                      materiaInfo?.esExtracurricular === true || 
-                                     habito.esExtracurricular === true;
+                                     habito.esExtracurricular === true ||
+                                     habito.tipo === 'EXTRACURRICULAR' ||
+                                     // Detectar por nombre de materia extracurricular conocida
+                                     esNombreExtracurricular(habito.nombre);
+        
+        console.log('🔍 ¿Es extracurricular?', {
+          nombre: habito.nombre,
+          tipo: habito.tipo,
+          esExtracurricular,
+          tipoMateriaNombre: tipoMateriaInfo?.nombre,
+          materiaEsExtracurricular: materiaInfo?.esExtracurricular
+        });
         
         // Determinar si es HOGAR basado en múltiples fuentes
         const esHogar = tipoMateriaInfo?.nombre === 'HOGAR' || 
@@ -851,7 +1085,7 @@ console.log('🔍 gradeService.getByStudent - URL completa:', fullUrl);
           ...habito,
           // Agregar información completa de la materia
           materia: materiaInfo || {
-            id: habito.evaluacionHabitoId,
+            id: habito.materiaId || habito.evaluacionHabitoId,
             nombre: habito.nombre || 'Sin nombre',
             descripcion: materiaInfo?.descripcion || '',
             codigo: materiaInfo?.codigo || '',
@@ -866,7 +1100,7 @@ console.log('🔍 gradeService.getByStudent - URL completa:', fullUrl);
           // Mantener las referencias directas para compatibilidad
           esExtracurricular: esExtracurricular,
           tipoMateriaId: materiaInfo?.tipoMateriaId || tipoMateriaInfo?.id || null,
-          tipoMateriaNombre: tipoMateriaInfo?.nombre || materiaInfo?.tipoMateria || 'SIN TIPO',
+          tipoMateriaNombre: tipoMateriaInfo?.nombre || materiaInfo?.tipoMateria || habito.tipo || 'SIN TIPO',
           codigo: materiaInfo?.codigo || habito.codigo || '',
           // Mantener los datos originales del backend como fallback
           idOriginal: habito.id,
@@ -874,9 +1108,129 @@ console.log('🔍 gradeService.getByStudent - URL completa:', fullUrl);
           esExtracurricularOriginal: habito.esExtracurricular,
           // Nuevos campos para mejor clasificación
           esHogar,
-          esHabito
+          esHabito,
+          // Importante: mantener el tipo original del backend
+          tipoOriginal: habito.tipo
         };
       });
+      
+      // 🔥 NUEVO: Auto-asignar extracurriculares según el grado del estudiante
+      try {
+        console.log('🔍 getHabitGrades - Verificando si se necesitan auto-asignar extracurriculares...');
+        
+        // Obtener grado del estudiante desde los hábitos ya cargados (evitar llamada API adicional)
+        let gradoEstudiante = '';
+        
+        // Buscar el grado en las materias de hábitos que tienen grados definidos
+        const habitConGrados = habitData.find((h: any) => h.grados && h.grados.length > 0);
+        if (habitConGrados && habitConGrados.grados) {
+          // Usar el primer grado disponible como referencia
+          gradoEstudiante = habitConGrados.grados[0];
+          console.log('🔍 getHabitGrades - Grado encontrado desde hábitos:', gradoEstudiante);
+        }
+        
+        // Si no se encuentra en los hábitos, intentar deducirlo de las calificaciones regulares
+        if (!gradoEstudiante) {
+          console.log('🔍 getHabitGrades - No se encontró grado en hábitos, usando valor por defecto para pruebas');
+          // Para pruebas, podemos usar un grado por defecto o pasarlo como parámetro
+          gradoEstudiante = '4° Perito Contador'; // Valor por defecto para pruebas
+        }
+        
+        console.log('🔍 getHabitGrades - Grado del estudiante:', gradoEstudiante);
+        
+        // Definir extracurriculares por grado (mismo que academicData.ts)
+        const extracurricularesPorGrado = {
+          '1° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+          '2° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+          '3° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+          '4° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+          '5° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+          '6° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+          '1° Básico': ['Moral Cristiana', 'Programa de Lectura'],
+          '2° Básico': ['Moral Cristiana', 'Programa de Lectura'],
+          '3° Básico': ['Moral Cristiana', 'Programa de Lectura'],
+          '4° PC': ['Moral Cristiana', 'Programa de Lectura'],
+          '5° PC': ['Moral Cristiana', 'Programa de Lectura'],
+          '6° PC': ['Moral Cristiana', 'Programa de Lectura'],
+          '4° Perito Contador': ['Moral Cristiana', 'Programa de Lectura'],
+          '5° Perito Contador': ['Moral Cristiana', 'Programa de Lectura'],
+          '6° Perito Contador': ['Moral Cristiana', 'Programa de Lectura'],
+          '4° Perito': ['Moral Cristiana', 'Programa de Lectura'],
+          '5° Perito': ['Moral Cristiana', 'Programa de Lectura'],
+          '6° Perito': ['Moral Cristiana', 'Programa de Lectura'],
+          '4° BCL': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+          '5° BCL': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+          '6° BCL': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+          '4° Bachillerato': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+          '5° Bachillerato': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+          '6° Bachillerato': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+          '4° Bachillerato en Ciencias y Letras': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+          '5° Bachillerato en Ciencias y Letras': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+          '6° Bachillerato en Ciencias y Letras': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal']
+        };
+        
+        // Verificar si el grado tiene extracurriculares definidas
+        const extracurricularesEsperadas = extracurricularesPorGrado[gradoEstudiante as keyof typeof extracurricularesPorGrado];
+        
+        if (extracurricularesEsperadas && extracurricularesEsperadas.length > 0) {
+          console.log('🔍 getHabitGrades - Extracurriculares esperadas para', gradoEstudiante, ':', extracurricularesEsperadas);
+          
+          // Obtener extracurriculares actuales del estudiante
+          const extracurricularesActuales = habitData.filter((h: any) => h.tipo === 'EXTRACURRICULAR');
+          const nombresActuales = extracurricularesActuales.map((h: any) => h.nombre);
+          
+          console.log('🔍 getHabitGrades - Extracurriculares actuales:', nombresActuales);
+          
+          // Verificar si faltan extracurriculares
+          const faltantes = extracurricularesEsperadas.filter(nombre => !nombresActuales.includes(nombre));
+          
+          if (faltantes.length > 0) {
+            console.log('🔍 getHabitGrades - Faltan extracurriculares por asignar:', faltantes);
+            
+            // Obtener información de las materias faltantes
+            for (const nombreFaltante of faltantes) {
+              const materiaInfo = todasLasMaterias.find((m: any) => m.nombre === nombreFaltante && m.esExtracurricular);
+              
+              if (materiaInfo) {
+                console.log('🔍 getHabitGrades - Agregando extracurricular faltante:', nombreFaltante);
+                
+                // Crear hábito extracurricular
+                const nuevoHabit = {
+                  evaluacionHabitoId: `auto-${materiaInfo.id}-${Date.now()}`,
+                  materiaId: materiaInfo.id,
+                  nombre: materiaInfo.nombre,
+                  descripcion: `Evaluación de ${materiaInfo.nombre}`,
+                  tipo: 'EXTRACURRICULAR',
+                  u1: null,
+                  u2: null,
+                  u3: null,
+                  u4: null,
+                  comentario: null,
+                  createdAt: null,
+                  updatedAt: null,
+                  calificaciones: [],
+                  esMateria: false,
+                  esExtracurricular: true,
+                  fuente: 'auto-asignado',
+                  grados: materiaInfo.grados || []
+                };
+                
+                habitData.push(nuevoHabit);
+              } else {
+                console.warn('🔍 getHabitGrades - No se encontró información para extracurricular:', nombreFaltante);
+              }
+            }
+            
+            console.log('🔍 getHabitGrades - Total hábitos después de auto-asignación:', habitData.length);
+          } else {
+            console.log('🔍 getHabitGrades - Todas las extracurriculares ya están asignadas correctamente');
+          }
+        } else {
+          console.log('🔍 getHabitGrades - No hay extracurriculares definidas para el grado:', gradoEstudiante);
+        }
+      } catch (error) {
+        console.warn('🔍 getHabitGrades - Error en auto-asignación de extracurriculares:', error);
+      }
       
       return habitData;
     } catch (error: any) {

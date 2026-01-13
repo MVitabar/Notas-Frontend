@@ -63,6 +63,7 @@ import {
   AlertCircle,
   TrendingUp,
   Home,
+  Star,
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
@@ -403,6 +404,7 @@ export function Dashboard() {
   // Estados para hábitos
   const [hogarEvaluations, setHogarEvaluations] = useState<any[]>([]);
   const [habitoEvaluations, setHabitoEvaluations] = useState<any[]>([]);
+  const [extracurricularEvaluations, setExtracurricularEvaluations] = useState<any[]>([]);
   const [loadingHabitGrades, setLoadingHabitGrades] = useState(false);
   const [loadingMaterias, setLoadingMaterias] = useState(false);
   const { user } = useAuth();
@@ -429,6 +431,7 @@ export function Dashboard() {
     setHabitEvaluationsGrades({});
     setHogarEvaluations([]);
     setHabitoEvaluations([]);
+    setExtracurricularEvaluations([]);
   };
 
   // Cargar los períodos académicos disponibles
@@ -531,16 +534,37 @@ export function Dashboard() {
       console.log('🔍 Dashboard - Hábitos con calificaciones:', habitData.length);
       
       // 🔥 Combinar: mostrar todos los hábitos, pero enriquecer los que tienen calificaciones
-      let habitosCombinados = habitosMaterias.map((materia: any) => {
-        // Buscar si esta materia tiene calificaciones como hábito
-        const habitConCalificacion = habitData.find((h: any) => h.evaluacionHabitoId === materia.id);
+      let habitosCombinados: any[] = [];
+      
+      // Primero agregar todos los hábitos con calificaciones (habitData)
+      habitData.forEach((habit: any) => {
+        // Buscar si este hábito tiene información de materia
+        const materiaInfo = habitosMaterias.find((m: any) => m.id === habit.evaluacionHabitoId);
         
-        if (habitConCalificacion) {
-          // Si tiene calificaciones, usar esos datos
-          return habitConCalificacion;
+        if (materiaInfo) {
+          // Si tiene info de materia, combinarla
+          habitosCombinados.push({
+            ...habit,
+            ...materiaInfo,
+            // Asegurar que los campos importantes se mantengan
+            nombre: habit.nombre || (materiaInfo as any).nombre,
+            evaluacionHabitoId: habit.evaluacionHabitoId,
+            tipo: habit.tipo || (materiaInfo as any).tipo,
+            tipoMateriaNombre: habit.tipoMateriaNombre || ((materiaInfo as any).tipoMateria?.nombre) || 'SIN TIPO'
+          });
         } else {
-          // Si no tiene calificaciones, crear estructura básica
-          return {
+          // Si no tiene info de materia, usar el hábito como está
+          habitosCombinados.push(habit);
+        }
+      });
+      
+      // Luego agregar las materias que no tienen calificaciones (solo extracurriculares usualmente)
+      habitosMaterias.forEach((materia: any) => {
+        const yaExiste = habitosCombinados.find((h: any) => h.evaluacionHabitoId === materia.id);
+        
+        if (!yaExiste) {
+          // Si no existe en habitData, agregarlo como materia sin calificaciones
+          habitosCombinados.push({
             ...materia,
             nombre: materia.nombre,
             evaluacionHabitoId: materia.id,
@@ -551,9 +575,9 @@ export function Dashboard() {
             comentario: null,
             calificaciones: [],
             materia: materia, // ← Mantener referencia a la materia
-            tipo: materia.tipoMateria?.nombre || 'SIN TIPO',
-            tipoMateriaNombre: materia.tipoMateria?.nombre || 'SIN TIPO'
-          };
+            tipo: (materia as any).tipoMateria?.nombre || 'SIN TIPO',
+            tipoMateriaNombre: (materia as any).tipoMateria?.nombre || 'SIN TIPO'
+          });
         }
       });
       
@@ -704,6 +728,7 @@ export function Dashboard() {
       setGrades(regularGrades);
       setHogarEvaluations(hogarEvals);
       setHabitoEvaluations(habitoEvals);
+      setExtracurricularEvaluations(extraescolarEvals);
       setHabitEvaluationsGrades(habitEvaluationsGradesData); // ← Nuevo: cargar hábitos regulares
       setExtraescolarHabitGrades(extraescolarHabitGradesData);
       
@@ -2275,36 +2300,7 @@ export function Dashboard() {
                                       </p>
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-4">
-                                    <Badge
-                                      variant="secondary"
-                                      className="whitespace-nowrap"
-                                    >
-                                      {materia.estudiantes} estudiante
-                                      {materia.estudiantes !== 1 ? "s" : ""}
-                                    </Badge>
-                                    <div className="flex gap-2">
-                                      <Link
-                                        href={`/classes/${materia.id}?bimester=${selectedBimester}&grado=${grado.grado}`}
-                                      >
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          className="h-8"
-                                        >
-                                          Ver Notas
-                                        </Button>
-                                      </Link>
-                                      <Link
-                                        href={`/upload/${materia.id}?bimester=${selectedBimester}`}
-                                      >
-                                        <Button size="sm" className="h-8">
-                                          <Upload className="h-3.5 w-3.5 mr-1.5" />
-                                          Subir
-                                        </Button>
-                                      </Link>
-                                    </div>
-                                  </div>
+                                  
                                 </div>
                               </div>
                             )
@@ -2529,29 +2525,7 @@ export function Dashboard() {
                           </Select>
                         </div>
 
-                        <div className="space-y-2">
-                          <Label htmlFor="tipoEvaluacion">
-                            Tipo de Evaluación
-                          </Label>
-                          <Select
-                            value={newGrade.tipoEvaluacion}
-                            onValueChange={(value) => setNewGrade({
-                              ...newGrade,
-                              tipoEvaluacion: value,
-                            })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar tipo" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {evaluationPeriods.map((period) => (
-                                <SelectItem key={period.id} value={period.id}>
-                                  {period.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        
 
                         <div className="space-y-2">
                           <Label htmlFor="tipoCalificacion">
@@ -2915,8 +2889,82 @@ export function Dashboard() {
                           </div>
                         )}
 
+                        {/* Sección de Áreas Extracurriculares */}
+                        {extracurricularEvaluations.length > 0 && (
+                          <div className="mb-6">
+                            <h4 className="font-medium text-amber-700 mb-3 flex items-center">
+                              <Star className="h-4 w-4 mr-2" />
+                              Áreas Extracurriculares
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {extracurricularEvaluations.map((evaluacion: any, index: number) => {
+                                const currentGrade = extraescolarHabitGrades[evaluacion.evaluacionHabitoId]?.valor;
+                                return (
+                                  <div key={`extracurricular-${index}`} className="bg-white p-3 rounded border border-amber-200">
+                                    <div className="flex justify-between items-center mb-2">
+                                      <h5 className="font-medium">{evaluacion.nombre || 'Sin nombre'}</h5>
+                                      <span className="text-xs text-gray-500">
+                                        ID: {evaluacion.evaluacionHabitoId?.slice(0, 8)}...
+                                      </span>
+                                    </div>
+                                    <div className="mb-3">
+                                      <div className="flex items-center space-x-2">
+                                        <span className="text-sm text-gray-500">
+                                          Evaluación:
+                                        </span>
+                                        <Select
+                                          value={currentGrade || ""}
+                                          onValueChange={async (value) => {
+                                            await handleSaveHabitGrade(evaluacion.evaluacionHabitoId, value as ValorConceptual);
+                                          }}
+                                        >
+                                          <SelectTrigger className="w-48">
+                                            <SelectValue placeholder="Sin evaluar">
+                                              {currentGrade ? getValorConceptualText(currentGrade as ValorConceptual) : "Seleccionar"}
+                                            </SelectValue>
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="DESTACA">Destaca</SelectItem>
+                                            <SelectItem value="AVANZA">Avanza</SelectItem>
+                                            <SelectItem value="NECESITA_MEJORAR">Necesita Mejorar</SelectItem>
+                                            <SelectItem value="INSATISFACTORIO">Insatisfactorio</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 text-sm">
+                                      {['u1', 'u2', 'u3', 'u4'].map((periodo: string) => (
+                                        <div key={periodo} className="flex flex-col">
+                                          <span className="text-gray-600 font-medium">{periodo.toUpperCase()}:</span>
+                                          <span className="text-gray-800">
+                                            {evaluacion[periodo as keyof any] || '-'}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                    {evaluacion.comentario && (
+                                      <div className="mt-2 pt-2 border-t border-amber-200">
+                                        <p className="text-sm text-gray-600">
+                                          <span className="font-medium">Comentario:</span> {evaluacion.comentario}
+                                        </p>
+                                      </div>
+                                    )}
+                                    {currentGrade && (
+                                      <div className="mt-2 pt-2 border-t border-amber-200">
+                                        <p className="text-sm text-green-600 font-medium">
+                                          Evaluación actual: {getValorConceptualText(currentGrade as ValorConceptual)}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Mensaje si no hay evaluaciones */}
-                        {hogarEvaluations.length === 0 && habitoEvaluations.length === 0 && (
+                        {hogarEvaluations.length === 0 && habitoEvaluations.length === 0 && extracurricularEvaluations.length === 0 && (
                           <div className="text-center py-8 text-gray-500">
                             <Users className="h-8 w-8 mx-auto mb-2 text-gray-400" />
                             <p className="font-medium mb-2">No hay evaluaciones de hábitos registradas para este estudiante</p>
@@ -2938,11 +2986,7 @@ export function Dashboard() {
               <Button variant="outline" onClick={closeStudentModal}>
                 Cerrar
               </Button>
-              <Button asChild>
-                <Link href={`/admin/students/${selectedStudent.id || ""}`}>
-                  Ver perfil completo
-                </Link>
-              </Button>
+              
             </div>
           </div>
         </div>

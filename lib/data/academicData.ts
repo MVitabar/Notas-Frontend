@@ -295,6 +295,9 @@ export const extracurricularSubjects = {
   '5° Bachillerato en Ciencias y Letras': [
     "Razonamiento Verbal", "Programa de Lectura", "Moral Cristiana"
   ],
+  '6° Bachillerato en Ciencias y Letras': [
+    "Razonamiento Verbal", "Programa de Lectura", "Moral Cristiana"
+  ],
   '4° Perito Contador': [
     "Programa de Lectura", "Moral Cristiana"
   ],
@@ -310,29 +313,29 @@ export const availableGrades = {
   'Preescolar': [
     "Nursery",
     "Prekinder",
-    "Kinder A",
-    "Kinder B",
-    "Preparatoria A",
-    "Preparatoria B"
+    "Kinder A", "Kinder",
+    "Kinder B", "Kinder",
+    "Preparatoria A", "Preparatoria",
+    "Preparatoria B", "Preparatoria"
   ],
   'Primaria': [
-    "1° Primaria A", "1° Primaria B",
-    "2° Primaria A", "2° Primaria B",
-    "3° Primaria A", "3° Primaria B",
-    "4° Primaria A", "4° Primaria B",
-    "5° Primaria A", "5° Primaria B",
-    "6° Primaria A", "6° Primaria B"
+    "1° Primaria A", "1° Primaria B", "1° Primaria",
+    "2° Primaria A", "2° Primaria B", "2° Primaria",
+    "3° Primaria A", "3° Primaria B", "3° Primaria",
+    "4° Primaria A", "4° Primaria B", "4° Primaria",
+    "5° Primaria A", "5° Primaria B", "5° Primaria",
+    "6° Primaria A", "6° Primaria B", "6° Primaria"
   ],
   'Básicos': [
-    "1° Básico A", "1° Básico B", "1° Básico C",
-    "2° Básico A", "2° Básico B", "2° Básico C",
-    "3° Básico A", "3° Básico B", "3° Básico C"
+    "1° Básico A", "1° Básico B", "1° Básico C", "1° Básico",
+    "2° Básico A", "2° Básico B", "2° Básico C", "2° Básico",
+    "3° Básico A", "3° Básico B", "3° Básico C", "3° Básico"
   ],
   'Diversificado': [
-    "4° Bachillerato en Ciencias y Letras",
-    "5° Bachillerato en Ciencias y Letras",
-    "4° Perito Contador",
-    "5° Perito Contador",
-    "6° Perito Contador"
+    "4° Bachillerato en Ciencias y Letras", "4° BCL", "4° Bachillerato",
+    "5° Bachillerato en Ciencias y Letras", "5° BCL", "5° Bachillerato",
+    "4° Perito Contador", "4° PC", "4° Perito",
+    "5° Perito Contador", "5° PC", "5° Perito",
+    "6° Perito Contador", "6° PC", "6° Perito"
   ]
 };

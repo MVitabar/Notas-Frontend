@@ -141,10 +141,125 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
             habitos_casa: habitGrades.filter((h: any) => h.tipo === 'CASA'),
             responsabilidad_aprendizaje: habitGrades.filter((h: any) => h.tipo === 'APRENDIZAJE'),
             responsabilidad_comportamiento: habitGrades.filter((h: any) => h.tipo === 'COMPORTAMIENTO'),
-            extracurriculares_valorativas: habitGrades.filter((h: any) => h.tipo === 'EXTRACURRICULAR')
+            extracurriculares_valorativas: habitGrades.filter((h: any) => {
+              // Filtrar extracurriculares usando múltiples criterios basados en los datos reales
+              // Criterio 1: esExtracurricular === true (más confiable según los datos)
+              const esExtraPorFlag = h.esExtracurricular === true;
+              
+              // Criterio 2: tipoMateriaId específico de extracurriculares
+              const esExtraPorTipoMateriaId = h.tipoMateriaId === '84324295-386d-4d43-9fdd-043ac7689b22';
+              
+              // Criterio 3: tipo === 'EXTRACURRICULAR' (si existe)
+              const esExtraPorTipo = h.tipo === 'EXTRACURRICULAR';
+              
+              // Criterio 4: tipoMateriaNombre === 'EXTRACURRICULAR' (si existe)
+              const esExtraPorTipoMateriaNombre = h.tipoMateriaNombre === 'EXTRACURRICULAR';
+              
+              // Criterio 5: Por nombre (fallback)
+              const nombresExtra = [
+                'comprensión de lectura',
+                'lógica matemática', 
+                'moral cristiana',
+                'programa de lectura',
+                'razonamiento verbal'
+              ];
+              const nombre = (h.nombre || '').toLowerCase();
+              const esExtraPorNombre = nombresExtra.some(n => nombre.includes(n));
+              
+              // Criterio 6: Verificar que la materia esté disponible para el grado del estudiante
+              let esValidaParaGrado = true; // Por defecto es válida
+              let debugGradoInfo = '';
+              
+              if (h.grados && estudiante.grado) {
+                // El estudiante.grado viene como "4° Bachillerato en Ciencias y Letras" o similar
+                const gradoEstudiante = estudiante.grado;
+                debugGradoInfo = `Grado Estudiante: ${gradoEstudiante}`;
+                
+                // Extraer componentes del grado del estudiante
+                const gradoMatch = gradoEstudiante.match(/(\d+)°?\s*(.+)/);
+                if (gradoMatch) {
+                  const [, grado, resto] = gradoMatch;  
+                  const nivel = resto.split(' ')[0]; // Primer palabra después del número
+                  
+                  // Construir diferentes formatos para verificar según el tipo de grado
+                  let formatos = [gradoEstudiante]; 
+                  
+                  // Agregar variaciones específicas según el nivel
+                  if (nivel.includes('Perito')) {
+                    formatos.push(
+                      `${grado}° ${nivel}`, // "4° Perito Contador"
+                      `${grado}° ${nivel.split(' ')[0]}`, // "4° Perito"
+                      `${grado} PC`, // "4 PC"
+                      `${grado}° PC`, // "4° PC"
+                      `${grado}°PC`, // "4°PC"
+                      `${grado}${nivel.split(' ')[0]}` // "4Perito"
+                    );
+                  } else if (nivel.includes('Bachillerato') || nivel.includes('BCL')) {
+                    formatos.push(
+                      `${grado}° ${nivel}`, // "4° Bachillerato"
+                      `${grado}°${nivel}`, // "4°Bachillerato"
+                      `${grado} BCL`, // "4 BCL"
+                      `${grado}°BCL`, // "4°BCL"
+                      `${grado}BCL` // "4BCL"
+                    );
+                  } else if (nivel.includes('Básico')) {
+                    formatos.push(
+                      `${grado}° ${nivel}`, // "1° Básico"
+                      `${grado} Básico` // "1 Básico"
+                    );
+                  } else if (nivel.includes('Primaria')) {
+                    formatos.push(
+                      `${grado}° ${nivel}`, // "4° Primaria"
+                      `${grado} Primaria` // "4 Primaria"
+                    );
+                  }
+                  
+                  // Verificar si algún formato coincide con los grados de la materia
+                  esValidaParaGrado = h.grados.some((g: string) => 
+                    formatos.some(formato => 
+                      g === formato || 
+                      g.includes(formato) || 
+                      formato.includes(g) ||
+                      (g.includes(`${grado}°`) && g.includes(nivel))
+                    )
+                  );
+                  
+                  if (h.esExtracurricular === true) {
+                    console.log(`🔍 PDF Grado Check - ${h.nombre}:`, {
+                      materiaGrados: h.grados,
+                      gradoEstudiante,
+                      formatos,
+                      resultado: esValidaParaGrado,
+                      debugInfo: debugGradoInfo
+                    });
+                  }
+                } else {
+                  // Si no puede parsear el grado, verificar coincidencia directa
+                  esValidaParaGrado = h.grados.includes(gradoEstudiante);
+                  
+                  if (h.esExtracurricular === true) {
+                    console.log(`🔍 PDF Grado Check (fallback) - ${h.nombre}:`, {
+                      materiaGrados: h.grados,
+                      gradoEstudiante,
+                      resultado: esValidaParaGrado,
+                      debugInfo: 'No se pudo parsear el grado'
+                    });
+                  }
+                }
+              }
+              
+              const esExtra = esExtraPorFlag || esExtraPorTipoMateriaId || esExtraPorTipo || esExtraPorTipoMateriaNombre || esExtraPorNombre;
+              
+              // Solo incluir si es extracurricular Y es válida para el grado del estudiante
+              return esExtra && esValidaParaGrado;
+            })
           };
           
           console.log('🔍 PDF - Extracurriculares filtradas:', habitData.extracurriculares_valorativas);
+          console.log('🔍 PDF - esExtracurricular flags:', habitGrades.filter((h: any) => h.esExtracurricular === true).map((h: any) => h.nombre));
+          console.log('🔍 PDF - tipoMateriaId de extracurriculares:', habitGrades.filter((h: any) => h.tipoMateriaId === '84324295-386d-4d43-9fdd-043ac7689b22').map((h: any) => h.nombre));
+          console.log('🔍 PDF - Grado del estudiante:', estudiante.grado);
+          console.log('🔍 PDF - Extracurriculares con grados:', habitGrades.filter((h: any) => h.esExtracurricular === true).map((h: any) => ({nombre: h.nombre, grados: h.grados})));
         } catch (habitError) {
           console.warn('No se pudieron cargar las evaluaciones de hábitos, continuando sin ellas:', habitError);
         }
@@ -153,10 +268,13 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
         const calculateAverage = (unit: string) => {
           const validGrades = grades
             .filter((g: any) => g[unit] !== undefined && g[unit] !== null)
-            .map((g: any) => Number(g[unit]));
+            .map((g: any, index: number) => ({ 
+              value: Number(g[unit]), 
+              key: `grade-${unit}-${index}` 
+            }));
           
           if (validGrades.length === 0) return 0;
-          return validGrades.reduce((a: number, b: number) => a + b, 0) / validGrades.length;
+          return validGrades.reduce((sum: number, item: any) => sum + item.value, 0) / validGrades.length;
         };
 
         const promedios = {
@@ -247,10 +365,14 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
         
         // Procesar las materias agrupadas
         for (const materiaData of materiasMap.values()) {
-          // Verificar si es extracurricular por el campo esExtraescolar del backend
-          const isExtracurricular = materiaData.esExtraescolar || false;
+          // Verificar si es extracurricular por múltiples criterios
+          const isExtracurricular = (
+            materiaData.esExtraescolar || // Campo directo del backend
+            materiaData.tipoMateria === 'EXTRACURRICULAR' || // Tipo de materia
+            materiaData.tipoMateriaId === '84324295-386d-4d43-9fdd-043ac7689b22' // ID específico
+          );
           
-          console.log('🔍 PDF - Procesando materia:', materiaData.nombre, 'esExtraescolar:', isExtracurricular);
+          console.log('🔍 PDF - Procesando materia:', materiaData.nombre, 'esExtraescolar:', materiaData.esExtraescolar, 'tipoMateria:', materiaData.tipoMateria, 'isExtracurricular:', isExtracurricular);
           
           if (isExtracurricular) {
             extracurriculares.push({
@@ -281,8 +403,8 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
         // Combinar extracurriculares de ambas fuentes: getHabitGrades y getByStudent
         // Priorizar evaluaciones de hábitos sobre calificaciones académicas cuando ambas existen
         const extracurricularesCombinadas = [
-          ...habitData.extracurriculares_valorativas, // De getHabitGrades (funciona bien)
-          ...extracurriculares // De getByStudent (como respaldo)
+          ...habitData.extracurriculares_valorativas, // De getHabitGrades (sin campo grados)
+          ...extracurriculares // De getByStudent (con campo grados)
         ];
 
         // Crear mapa de extracurriculares por nombre para priorizar
@@ -306,8 +428,168 @@ export function DownloadGradeReportButton({ estudiante, periodo }: DownloadGrade
           }
         });
 
-        // Convertir a array y eliminar duplicados por nombre (manteniendo prioridad de habitGrades)
-        const extracurricularesUnicas = Array.from(extracurricularesMap.values());
+        // Convertir a array y filtrar por grado del estudiante
+        let extracurricularesUnicas = Array.from(extracurricularesMap.values());
+        
+        // Filtrar por grado del estudiante
+        if (estudiante.grado) {
+          const gradoEstudiante = estudiante.grado;
+          console.log('🔍 PDF - Filtrando extracurriculares por grado:', gradoEstudiante);
+          
+          // Extraer componentes del grado del estudiante
+          const gradoMatch = gradoEstudiante.match(/(\d+)°?\s*(.+)/);
+          if (gradoMatch) {
+            const [, grado, resto] = gradoMatch;  
+            const nivel = resto.split(' ')[0]; // Primer palabra después del número
+            
+            // Construir diferentes formatos para verificar según el tipo de grado
+            let formatos = [gradoEstudiante]; // Original: "4° Perito Contador"
+            
+            // Agregar variaciones específicas según el nivel
+            if (nivel.includes('Perito')) {
+              formatos.push(
+                `${grado}° ${nivel}`, // "4° Perito Contador"
+                `${grado}° ${nivel.split(' ')[0]}`, // "4° Perito"
+                `${grado} PC`, // "4 PC"
+                `${grado}° PC`, // "4° PC"
+                `${grado}°PC`, // "4°PC"
+                `${grado}${nivel.split(' ')[0]}` // "4Perito"
+              );
+            } else if (nivel.includes('Bachillerato') || nivel.includes('BCL')) {
+              formatos.push(
+                `${grado}° ${nivel}`, // "4° Bachillerato"
+                `${grado}°${nivel}`, // "4°Bachillerato"
+                `${grado} BCL`, // "4 BCL"
+                `${grado}°BCL`, // "4°BCL"
+                `${grado}BCL` // "4BCL"
+              );
+            } else if (nivel.includes('Básico')) {
+              formatos.push(
+                `${grado}° ${nivel}`, // "1° Básico"
+                `${grado} Básico` // "1 Básico"
+              );
+            } else if (nivel.includes('Primaria')) {
+              formatos.push(
+                `${grado}° ${nivel}`, // "4° Primaria"
+                `${grado} Primaria` // "4 Primaria"
+              );
+            }
+            console.log('🔍 PDF - Formatos de grado a verificar:', formatos);
+            
+            extracurricularesUnicas = extracurricularesUnicas.filter(extracurricular => {
+              // Si tiene campo grados (de getByStudent), usarlo para filtrar
+              if (extracurricular.grados && Array.isArray(extracurricular.grados)) {
+                const esValida = extracurricular.grados.some((g: string) => 
+                  formatos.some(formato => 
+                    g === formato || 
+                    g.includes(formato) || 
+                    formato.includes(g) ||
+                    (g.includes(`${grado}°`) && g.includes(nivel))
+                  )
+                );
+                
+                console.log(`🔍 PDF - Filtrado ${extracurricular.nombre}:`, {
+                  materiaGrados: extracurricular.grados,
+                  esValida,
+                  fuente: extracurricular.fuente
+                });
+                
+                return esValida;
+              } else {
+                // Si no tiene campo grados (de habitGrades), verificar por nombre contra academicData
+                const nombresPorGrado = {
+                  '1° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+                  '2° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+                  '3° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+                  '4° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+                  '5° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+                  '6° Primaria': ['Comprensión de Lectura', 'Lógica Matemática'],
+                  '1° Básico': ['Moral Cristiana', 'Programa de Lectura'],
+                  '2° Básico': ['Moral Cristiana', 'Programa de Lectura'],
+                  '3° Básico': ['Moral Cristiana', 'Programa de Lectura'],
+                  '4° PC': ['Moral Cristiana', 'Programa de Lectura'],
+                  '5° PC': ['Moral Cristiana', 'Programa de Lectura'],
+                  '6° PC': ['Moral Cristiana', 'Programa de Lectura'],
+                  '4° Perito Contador': ['Moral Cristiana', 'Programa de Lectura'],
+                  '5° Perito Contador': ['Moral Cristiana', 'Programa de Lectura'],
+                  '6° Perito Contador': ['Moral Cristiana', 'Programa de Lectura'],
+                  '4° Perito': ['Moral Cristiana', 'Programa de Lectura'],
+                  '5° Perito': ['Moral Cristiana', 'Programa de Lectura'],
+                  '6° Perito': ['Moral Cristiana', 'Programa de Lectura'],
+                  '4° BCL': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+                  '5° BCL': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+                  '6° BCL': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+                  // Agregar más formatos para Bachillerato
+                  '4° Bachillerato': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+                  '5° Bachillerato': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+                  '6° Bachillerato': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+                  '4° Bachillerato en Ciencias y Letras': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+                  '5° Bachillerato en Ciencias y Letras': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal'],
+                  '6° Bachillerato en Ciencias y Letras': ['Moral Cristiana', 'Programa de Lectura', 'Razonamiento Verbal']
+                };
+                
+                // Construir formatos específicos según el tipo de grado
+                let formatosParaBuscar = [gradoEstudiante];
+                let nombresValidos: string[] = [];
+                
+                if (nivel.includes('Perito')) {
+                  formatosParaBuscar = [
+                    gradoEstudiante,
+                    `${grado}° ${nivel}`, // "4° Perito Contador"
+                    `${grado}° ${nivel.split(' ')[0]}`, // "4° Perito"
+                    `${grado} PC`, // "4 PC"
+                    `${grado}° PC`, // "4° PC"
+                    `${grado}Perito` // "4Perito"
+                  ];
+                } else if (nivel.includes('Bachillerato') || nivel.includes('BCL') || nivel.includes('Ciencias') || nivel.includes('Letras')) {
+                  formatosParaBuscar = [
+                    gradoEstudiante,
+                    `${grado}° BCL`, // "4° BCL"
+                    `${grado} BCL`, // "4 BCL"
+                    `${grado}°BCL`, // "4°BCL"
+                    `${grado}BCL`, // "4BCL"
+                    `${grado}° Bachillerato`, // "4° Bachillerato"
+                    `${grado} Bachillerato`, // "4 Bachillerato"
+                    `${grado}° Bachillerato en Ciencias y Letras`, // "4° Bachillerato en Ciencias y Letras"
+                    `${grado} Bachillerato en Ciencias y Letras` // "4 Bachillerato en Ciencias y Letras"
+                  ];
+                } else if (nivel.includes('Básico')) {
+                  formatosParaBuscar = [
+                    gradoEstudiante,
+                    `${grado}° ${nivel}`, // "1° Básico"
+                    `${grado} Básico` // "1 Básico"
+                  ];
+                } else if (nivel.includes('Primaria')) {
+                  formatosParaBuscar = [
+                    gradoEstudiante,
+                    `${grado}° ${nivel}`, // "4° Primaria"
+                    `${grado} Primaria` // "4 Primaria"
+                  ];
+                }
+                
+                for (const formato of formatosParaBuscar) {
+                  const encontrados = nombresPorGrado[formato as keyof typeof nombresPorGrado] || [];
+                  if (encontrados.length > 0) {
+                    nombresValidos = encontrados;
+                    break;
+                  }
+                }
+                
+                const esValida = nombresValidos.includes(extracurricular.nombre);
+                
+                console.log(`🔍 PDF - Filtrado por nombre ${extracurricular.nombre}:`, {
+                  gradoEstudiante,
+                  formatosParaBuscar,
+                  nombresValidos,
+                  esValida,
+                  fuente: extracurricular.fuente
+                });
+                
+                return esValida;
+              }
+            });
+          }
+        }
 
         const transformedData = {
           estudiante: {
