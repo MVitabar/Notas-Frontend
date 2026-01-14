@@ -1280,7 +1280,8 @@ export default function AdminGradesPage() {
                                 </h5>
                                 <div className="space-y-4">
                                   {extracurriculares.map((habit: any) => {
-                                    const habitKey = habit.evaluacionHabitoId || habit.id;
+                                    // Crear key única combinando múltiples campos para evitar duplicados
+                                    const habitKey = `${habit.evaluacionHabitoId || habit.id || 'unknown'}-${habit.tipo || 'EXTRACURRICULAR'}-${habit.nombre || 'unnamed'}`;
                                     return (
                                     <div key={habitKey} className="bg-white p-4 rounded-lg border">
                                       <h6 className="font-medium text-green-700 mb-3">
@@ -1358,7 +1359,8 @@ export default function AdminGradesPage() {
                                 </h5>
                                 <div className="space-y-4">
                                   {habitosTipo.map((habit: any) => {
-                                    const habitKey = habit.evaluacionHabitoId || habit.id;
+                                    // Crear key única combinando múltiples campos para evitar duplicados
+                                    const habitKey = `${habit.evaluacionHabitoId || habit.id || 'unknown'}-${habit.tipo}-${habit.nombre || 'unnamed'}`;
                                     return (
                                     <div key={habitKey} className="bg-white p-3 rounded-lg border">
                                       <h6 className="font-medium text-blue-700 mb-2">
